@@ -112,6 +112,7 @@ export interface DashboardWidget {
   type: WidgetType;
   title: string;
   deviceEUI?: string;       // devEUI target (or 'all' for comparative bar/map)
+  deviceGroupId?: string;    // target Device Group ID (for comparative lines)
   selectedDevices?: string[]; // selected device EUIs for map/bar widgets
   metricKey?: string;       // flow, level, fillLevel, temperature, battery, etc.
   metricUnit?: string;      // e.g. L/h, %, °C
@@ -129,4 +130,30 @@ export interface CustomDashboard {
   presetType?: 'general' | 'water_meters' | 'smartbins';
   widgets: DashboardWidget[];
   organizationId?: string;
+}
+
+export interface DeviceGroup {
+  id: string;
+  name: string;
+  deviceType: 'water_meter' | 'smartbin';
+  deviceEUIs: string[];
+  organizationId?: string;
+  createdAt: string;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  deviceEUI?: string;       // EUI de dispositivo específico (vacío si es por grupo o todos)
+  deviceGroupId?: string;   // ID de grupo de dispositivos
+  applyToAll: boolean;      // Si se aplica a todos los dispositivos del tipo seleccionado
+  deviceType: 'water_meter' | 'smartbin';
+  metricKey: string;        // Métrica a analizar: flow, level, fillLevel, temperature, battery, etc.
+  operator: '<' | '>' | '<=' | '>=' | '==';
+  thresholdValue: number;   // Valor límite
+  severity: 'critical' | 'warning' | 'info';
+  messageTemplate: string;  // Mensaje a mostrar, ej. "Alerta: {deviceName} reportó {value} L/h"
+  active: boolean;
+  organizationId: string;   // Aislamiento multi-tenant
+  createdAt: string;
 }

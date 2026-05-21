@@ -3,17 +3,18 @@ import {
   Droplets, Trash2, Plus, Settings, 
   Trash, Cpu, Gauge, Map as MapIcon, Thermometer, 
   Battery, Wind, X, LayoutDashboard, Activity, ArrowLeft,
-  Zap, Lightbulb, Database, Waves, LineChart, BarChart3
+  Zap, Lightbulb, Database, Waves, LineChart as LineChartIcon, BarChart3
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, Legend } from 'recharts';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getDevices, getDeviceTelemetry } from '../services/api';
-import type { Device, TelemetryRecord, CustomDashboard, DashboardWidget, TableColumnConfig } from '../types';
+import type { Device, TelemetryRecord, CustomDashboard, DashboardWidget, TableColumnConfig, DeviceGroup } from '../types';
 import { format } from 'date-fns';
 import { generateTelemetryHistory } from '../services/mockData';
 import { useAuth } from '../context/AuthContext';
+import { evaluateTelemetry } from '../services/alertsEngine';
 
 // Fix de iconos Leaflet en Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -164,6 +165,121 @@ export default function DashboardPage() {
   // Cache para historiales de telemetría de widgets
   const [telemetryHistory, setTelemetryHistory] = useState<Record<string, TelemetryRecord[]>>({});
   
+  // Estados para grupos de dispositivos y creación inline
+  const [deviceGroups, setDeviceGroups] = useState<DeviceGroup[]>([]);
+  const [newWidgetDeviceGroupId, setNewWidgetDeviceGroupId] = useState('');
+  const [newWidgetSourceType, setNewWidgetSourceType] = useState<'single' | 'group'>('single');
+  const [showNewGroupForm, setShowNewGroupForm] = useState(false);
+  const [inlineGroupName, setInlineGroupName] = useState('');
+  const [inlineGroupType, setInlineGroupType] = useState<'water_meter' | 'smartbin'>('water_meter');
+  const [inlineGroupSelectedDevices, setInlineGroupSelectedDevices] = useState<string[]>([]);
+
+  // Estado para la notificación flotante de alertas en tiempo real
+  const [activeToast, setActiveToast] = useState<{ id: string, title: string, message: string, severity: 'critical' | 'warning' | 'info' } | null>(null);
+
+  // Sintetizador de tonos de alerta retro IoT
+  const playChime = (severity: 'critical' | 'warning' | 'info') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (severity === 'critical') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // Nota La5 (A5)
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        
+        setTimeout(() => {
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.type = 'triangle';
+          osc2.frequency.setValueAtTime(880, ctx.currentTime);
+          gain2.gain.setValueAtTime(0.12, ctx.currentTime);
+          osc2.start();
+          gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+          setTimeout(() => osc2.stop(), 200);
+        }, 180);
+        setTimeout(() => osc.stop(), 200);
+      } else if (severity === 'warning') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // Nota Re5 (D5)
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        setTimeout(() => osc.stop(), 300);
+      } else {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1046.50, ctx.currentTime); // Nota Do6 (C6)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        setTimeout(() => osc.stop(), 200);
+      }
+    } catch (e) {
+      console.warn('Audio synthesis skipped due to user interaction policy', e);
+    }
+  };
+
+  // Motor de evaluación de reglas de monitoreo en tiempo real
+  useEffect(() => {
+    if (devices.length === 0 || Object.keys(telemetryHistory).length === 0) return;
+    
+    const targetOrg = user?.role === 'superadmin' 
+      ? activeDashboard?.organizationId || 'org1' 
+      : user?.organizationId || 'org1';
+
+    Object.entries(telemetryHistory).forEach(([eui, history]) => {
+      if (!history || history.length === 0) return;
+      const device = devices.find(d => d.devEUI === eui);
+      if (!device) return;
+
+      const latestRecord = history[0]; // El reporte más reciente
+
+      const triggeredAlert = evaluateTelemetry(device, latestRecord, targetOrg);
+      if (triggeredAlert) {
+        // Ejecutar sonido interactivo
+        playChime(triggeredAlert.severity);
+
+        // Mostrar notificación tipo Toast flotante
+        setActiveToast({
+          id: triggeredAlert.id,
+          title: triggeredAlert.severity === 'critical' 
+            ? '🚨 Alarma Crítica' 
+            : triggeredAlert.severity === 'warning' 
+              ? '⚠️ Advertencia IoT' 
+              : 'ℹ️ Evento del Dispositivo',
+          message: triggeredAlert.message,
+          severity: triggeredAlert.severity
+        });
+      }
+    });
+  }, [telemetryHistory, devices, activeTab]);
+
+  const loadDeviceGroups = () => {
+    const saved = localStorage.getItem('device_groups');
+    if (saved) {
+      try {
+        setDeviceGroups(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error cargando grupos en DashboardPage', e);
+      }
+    } else {
+      setDeviceGroups([]);
+    }
+  };
+
+  useEffect(() => {
+    loadDeviceGroups();
+  }, []);
+  
   const [newDashOrgId, setNewDashOrgId] = useState('org1');
   const [editDashOrgId, setEditDashOrgId] = useState('org1');
   const [deviceMappings, setDeviceMappings] = useState<Record<string, string>>({});
@@ -233,28 +349,66 @@ export default function DashboardPage() {
     const activeDash = dashboards.find(d => d.id === activeTab);
     if (!activeDash) return;
 
+    loadDeviceGroups();
+
     activeDash.widgets.forEach(widget => {
-      if (widget.type === 'line' && widget.deviceEUI && !telemetryHistory[widget.deviceEUI]) {
-        getDeviceTelemetry(widget.deviceEUI, 24)
-          .then(data => {
-            if (data && data.length > 0) {
-              setTelemetryHistory(prev => ({
-                ...prev,
-                [widget.deviceEUI!]: data
-              }));
-            } else {
+      if (widget.type === 'line') {
+        // Caso 1: Dispositivo Único
+        if (widget.deviceEUI && !telemetryHistory[widget.deviceEUI]) {
+          getDeviceTelemetry(widget.deviceEUI, 24)
+            .then(data => {
+              if (data && data.length > 0) {
+                setTelemetryHistory(prev => ({
+                  ...prev,
+                  [widget.deviceEUI!]: data
+                }));
+              } else {
+                setTelemetryHistory(prev => ({
+                  ...prev,
+                  [widget.deviceEUI!]: generateTelemetryHistory(widget.deviceEUI!, 24)
+                }));
+              }
+            })
+            .catch(() => {
               setTelemetryHistory(prev => ({
                 ...prev,
                 [widget.deviceEUI!]: generateTelemetryHistory(widget.deviceEUI!, 24)
               }));
-            }
-          })
-          .catch(() => {
-            setTelemetryHistory(prev => ({
-              ...prev,
-              [widget.deviceEUI!]: generateTelemetryHistory(widget.deviceEUI!, 24)
-            }));
-          });
+            });
+        }
+
+        // Caso 2: Grupo de Dispositivos (precargar telemetrías de cada dispositivo en el grupo)
+        if (widget.deviceGroupId) {
+          const saved = localStorage.getItem('device_groups');
+          const allGroups: DeviceGroup[] = saved ? JSON.parse(saved) : [];
+          const group = allGroups.find(g => g.id === widget.deviceGroupId);
+          if (group) {
+            group.deviceEUIs.forEach(eui => {
+              if (!telemetryHistory[eui]) {
+                getDeviceTelemetry(eui, 24)
+                  .then(data => {
+                    if (data && data.length > 0) {
+                      setTelemetryHistory(prev => ({
+                        ...prev,
+                        [eui]: data
+                      }));
+                    } else {
+                      setTelemetryHistory(prev => ({
+                        ...prev,
+                        [eui]: generateTelemetryHistory(eui, 24)
+                      }));
+                    }
+                  })
+                  .catch(() => {
+                    setTelemetryHistory(prev => ({
+                      ...prev,
+                      [eui]: generateTelemetryHistory(eui, 24)
+                    }));
+                  });
+              }
+            });
+          }
+        }
       }
     });
   }, [activeTab, dashboards]);
@@ -410,6 +564,11 @@ export default function DashboardPage() {
     setNewWidgetTitle('');
     setNewWidgetType('kpi');
     setNewWidgetDevice('');
+    setNewWidgetDeviceGroupId('');
+    setNewWidgetSourceType('single');
+    setShowNewGroupForm(false);
+    setInlineGroupName('');
+    setInlineGroupSelectedDevices([]);
     setNewWidgetMetric('flow');
     setNewWidgetUnit('L/h');
     setNewWidgetColor('teal');
@@ -425,7 +584,20 @@ export default function DashboardPage() {
     setEditingWidget(widget);
     setNewWidgetTitle(widget.title);
     setNewWidgetType(widget.type);
-    setNewWidgetDevice(widget.deviceEUI || '');
+    
+    if (widget.deviceGroupId) {
+      setNewWidgetDeviceGroupId(widget.deviceGroupId);
+      setNewWidgetSourceType('group');
+      setNewWidgetDevice('');
+    } else {
+      setNewWidgetDeviceGroupId('');
+      setNewWidgetSourceType('single');
+      setNewWidgetDevice(widget.deviceEUI || '');
+    }
+    setShowNewGroupForm(false);
+    setInlineGroupName('');
+    setInlineGroupSelectedDevices([]);
+
     setNewWidgetMetric(widget.metricKey || 'flow');
     setNewWidgetUnit(widget.metricUnit || '');
     setNewWidgetColor(widget.color || 'teal');
@@ -447,7 +619,8 @@ export default function DashboardPage() {
         id: newId,
         type: newWidgetType,
         title: newWidgetTitle,
-        deviceEUI: newWidgetType !== 'bar' && newWidgetType !== 'map' ? newWidgetDevice : undefined,
+        deviceEUI: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'single') ? newWidgetDevice : undefined,
+        deviceGroupId: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'group') ? newWidgetDeviceGroupId : undefined,
         selectedDevices: (newWidgetType === 'map' || newWidgetType === 'bar') ? newWidgetSelectedDevices : undefined,
         metricKey: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetMetric : undefined,
         metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
@@ -477,7 +650,8 @@ export default function DashboardPage() {
               ...w,
               type: newWidgetType,
               title: newWidgetTitle,
-              deviceEUI: newWidgetType !== 'bar' && newWidgetType !== 'map' ? newWidgetDevice : undefined,
+              deviceEUI: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'single') ? newWidgetDevice : undefined,
+              deviceGroupId: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'group') ? newWidgetDeviceGroupId : undefined,
               selectedDevices: (newWidgetType === 'map' || newWidgetType === 'bar') ? newWidgetSelectedDevices : undefined,
               metricKey: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetMetric : undefined,
               metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
@@ -558,7 +732,7 @@ export default function DashboardPage() {
       Lightbulb: Lightbulb,
       Database: Database,
       Waves: Waves,
-      LineChart: LineChart,
+      LineChart: LineChartIcon,
       BarChart3: BarChart3
     };
     const Component = iconMap[iconName] || LayoutDashboard;
@@ -609,6 +783,87 @@ export default function DashboardPage() {
         );
       }
       case 'line': {
+        // CASO A: Comparativa de Grupo de Dispositivos
+        if (widget.deviceGroupId) {
+          const activeGroup = deviceGroups.find(g => g.id === widget.deviceGroupId) || 
+                            JSON.parse(localStorage.getItem('device_groups') || '[]').find((g: any) => g.id === widget.deviceGroupId);
+          
+          if (!activeGroup) {
+            return (
+              <div className="text-muted" style={{ padding: '40px 0', fontSize: 12, textAlign: 'center' }}>
+                Grupo de dispositivos no encontrado.
+              </div>
+            );
+          }
+
+          const missingData = activeGroup.deviceEUIs.some((eui: string) => !telemetryHistory[eui]);
+          if (missingData) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: 200 }}>
+                <RefreshCw size={18} className="animate-spin text-muted" />
+                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--color-muted)', marginTop: 8 }}>
+                  Cargando telemetrías comparativas...
+                </span>
+              </div>
+            );
+          }
+
+          // Alinear telemetrías por fecha
+          const masterEUI = activeGroup.deviceEUIs[0];
+          const masterHistory = [...(telemetryHistory[masterEUI] || [])].reverse(); // del más antiguo al más nuevo
+
+          const mergedData = masterHistory.map((h, index) => {
+            const timeStr = format(new Date(h.receivedAt), 'HH:mm');
+            const dataPoint: any = { time: timeStr };
+            
+            activeGroup.deviceEUIs.forEach((eui: string) => {
+              const dev = devices.find(d => d.devEUI === eui);
+              const name = dev ? dev.name : `Sensor ${eui.substring(0, 6)}`;
+              
+              const devHist = telemetryHistory[eui] || [];
+              const revIdx = devHist.length - 1 - index;
+              const devRecord = devHist[revIdx] || devHist[index];
+              
+              const val = devRecord ? Number((devRecord.decodedPayload as any)[widget.metricKey || 'flow']?.toFixed(1) ?? 0) : null;
+              dataPoint[name] = val;
+            });
+            
+            return dataPoint;
+          });
+
+          const PRESET_COLORS = ['#1D9E75', '#185FA5', '#BA7517', '#8A3FFC', '#A32D2D', '#EC4899', '#4B5563'];
+
+          return (
+            <div style={{ width: '100%', height: 210, marginTop: 12 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={mergedData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={3} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: any, name: string) => [`${v} ${widget.metricUnit}`, name]} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 10, paddingTop: 10 }} />
+                  {activeGroup.deviceEUIs.map((eui: string, idx: number) => {
+                    const dev = devices.find(d => d.devEUI === eui);
+                    const name = dev ? dev.name : `Sensor ${eui.substring(0, 6)}`;
+                    const color = PRESET_COLORS[idx % PRESET_COLORS.length];
+                    return (
+                      <Line 
+                        key={eui}
+                        type="monotone"
+                        dataKey={name}
+                        stroke={color}
+                        strokeWidth={2.5}
+                        dot={false}
+                        connectNulls={true}
+                      />
+                    );
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        }
+
+        // CASO B: Dispositivo Único
         const history = telemetryHistory[widget.deviceEUI || ''] || [];
         const formatted = [...history].reverse().map(h => ({
           time: format(new Date(h.receivedAt), 'HH:mm'),
@@ -1482,36 +1737,307 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 3. SELECCIÓN DE DISPOSITIVO (KPI, LÍNEA, TABLA) */}
+              {/* 3. SELECCIÓN DE DISPOSITIVO O GRUPO DE ORIGEN (KPI, LÍNEA, TABLA) */}
               {newWidgetType !== 'bar' && newWidgetType !== 'map' && (
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>3. Dispositivo IoT de Origen *</label>
-                  <select 
-                    className="form-input" 
-                    value={newWidgetDevice} 
-                    onChange={(e) => {
-                      setNewWidgetDevice(e.target.value);
-                      const dev = devices.find(d => d.devEUI === e.target.value);
-                      if (dev) {
-                        if (dev.deviceType === 'water_meter') {
-                          setNewWidgetMetric('flow');
-                          setNewWidgetUnit('L/h');
-                          setNewWidgetColor('teal');
-                        } else {
-                          setNewWidgetMetric('fillLevel');
-                          setNewWidgetUnit('%');
-                          setNewWidgetColor('amber');
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">Selecciona un dispositivo...</option>
-                    {filteredDevices.map(d => (
-                      <option key={d.devEUI} value={d.devEUI}>
-                        {d.name} ({d.deviceType === 'water_meter' ? '💧 Medidor' : '🗑️ SmartBin'})
-                      </option>
-                    ))}
-                  </select>
+                  {/* Selector de Origen de Datos para Línea/Área */}
+                  {newWidgetType === 'line' && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="form-label" style={{ fontWeight: 650, display: 'block', marginBottom: 6 }}>
+                        3. Origen de Datos para Historial *
+                      </label>
+                      <div style={{ display: 'flex', gap: 14 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="radio"
+                            name="widgetSourceType"
+                            checked={newWidgetSourceType === 'single'}
+                            onChange={() => {
+                              setNewWidgetSourceType('single');
+                              setNewWidgetDeviceGroupId('');
+                              setShowNewGroupForm(false);
+                            }}
+                            style={{ accentColor: 'var(--teal)' }}
+                          />
+                          <span style={{ fontWeight: 500 }}>Dispositivo Único</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="radio"
+                            name="widgetSourceType"
+                            checked={newWidgetSourceType === 'group'}
+                            onChange={() => {
+                              setNewWidgetSourceType('group');
+                              setNewWidgetDevice('');
+                              setShowNewGroupForm(false);
+                            }}
+                            style={{ accentColor: 'var(--teal)' }}
+                          />
+                          <span style={{ fontWeight: 500 }}>Grupo de Dispositivos</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CASO A: Dispositivo Único (OBLIGATORIO para KPI y Tabla, o si se eligió Dispositivo Único en Línea) */}
+                  {(newWidgetType !== 'line' || newWidgetSourceType === 'single') ? (
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600 }}>
+                        {newWidgetType === 'line' ? 'Seleccionar Dispositivo *' : '3. Dispositivo IoT de Origen *'}
+                      </label>
+                      <select 
+                        className="form-input" 
+                        value={newWidgetDevice} 
+                        onChange={(e) => {
+                          setNewWidgetDevice(e.target.value);
+                          const dev = devices.find(d => d.devEUI === e.target.value);
+                          if (dev) {
+                            if (dev.deviceType === 'water_meter') {
+                              setNewWidgetMetric('flow');
+                              setNewWidgetUnit('L/h');
+                              setNewWidgetColor('teal');
+                            } else {
+                              setNewWidgetMetric('fillLevel');
+                              setNewWidgetUnit('%');
+                              setNewWidgetColor('amber');
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">Selecciona un dispositivo...</option>
+                        {filteredDevices.map(d => (
+                          <option key={d.devEUI} value={d.devEUI}>
+                            {d.name} ({d.deviceType === 'water_meter' ? '💧 Medidor' : '🗑️ SmartBin'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    /* CASO B: Grupo de Dispositivos (Solo Línea) */
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
+                          Seleccionar Grupo de Dispositivos *
+                        </label>
+                        {!showNewGroupForm && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNewGroupForm(true);
+                              setInlineGroupName('');
+                              setInlineGroupType('water_meter');
+                              setInlineGroupSelectedDevices([]);
+                            }}
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: 'var(--teal-dark)',
+                              background: 'var(--teal-bg)',
+                              border: '1px solid var(--teal)',
+                              borderRadius: 6,
+                              padding: '2px 8px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + Nuevo Grupo Inline
+                          </button>
+                        )}
+                      </div>
+
+                      {!showNewGroupForm ? (
+                        <select
+                          className="form-input"
+                          value={newWidgetDeviceGroupId}
+                          onChange={(e) => {
+                            setNewWidgetDeviceGroupId(e.target.value);
+                            const selectedGrp = deviceGroups.find(g => g.id === e.target.value) || 
+                                               JSON.parse(localStorage.getItem('device_groups') || '[]').find((g: any) => g.id === e.target.value);
+                            if (selectedGrp) {
+                              if (selectedGrp.deviceType === 'water_meter') {
+                                setNewWidgetMetric('flow');
+                                setNewWidgetUnit('L/h');
+                                setNewWidgetColor('teal');
+                              } else {
+                                setNewWidgetMetric('fillLevel');
+                                setNewWidgetUnit('%');
+                                setNewWidgetColor('amber');
+                              }
+                            }
+                          }}
+                        >
+                          <option value="">Selecciona un grupo...</option>
+                          {deviceGroups.filter(g => {
+                            const targetOrg = user?.role === 'superadmin' ? editDashOrgId || newDashOrgId || 'org1' : user?.organizationId || 'org1';
+                            return g.organizationId === targetOrg;
+                          }).map(g => (
+                            <option key={g.id} value={g.id}>
+                              {g.name} ({g.deviceType === 'water_meter' ? '💧 Medidores' : '🗑️ SmartBins'}) — {g.deviceEUIs.length} dispositivos
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        /* Formulario inline para agregar grupo */
+                        <div style={{
+                          padding: 12,
+                          border: '1.5px dashed var(--teal)',
+                          borderRadius: 8,
+                          background: 'rgba(29, 158, 117, 0.04)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                          marginTop: 6,
+                          animation: 'fadeIn 0.2s ease'
+                        }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--teal-dark)', borderBottom: '1.5px solid rgba(29, 158, 117, 0.15)', paddingBottom: 4 }}>
+                            Crear Conjunto / Grupo Inline
+                          </div>
+                          
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 11, marginBottom: 3, fontWeight: 600 }}>Nombre del Conjunto *</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Ej. Comparación Humedad Sector C"
+                              value={inlineGroupName}
+                              onChange={(e) => setInlineGroupName(e.target.value)}
+                              style={{ fontSize: 12, minHeight: 34, padding: '4px 8px' }}
+                            />
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 11, marginBottom: 3, fontWeight: 600 }}>Tipo de Sensores</label>
+                            <select
+                              className="form-input"
+                              value={inlineGroupType}
+                              onChange={(e: any) => {
+                                setInlineGroupType(e.target.value);
+                                setInlineGroupSelectedDevices([]);
+                              }}
+                              style={{ fontSize: 12, minHeight: 34, padding: '4px 8px', backgroundPosition: 'calc(100% - 10px) 50%' }}
+                            >
+                              <option value="water_meter">💧 Medidores de Agua</option>
+                              <option value="smartbin">🗑️ SmartBins (Contenedores)</option>
+                            </select>
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 11, marginBottom: 4, fontWeight: 600 }}>Selecciona los integrantes *</label>
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 4,
+                              maxHeight: 110,
+                              overflowY: 'auto',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: 6,
+                              padding: 6,
+                              background: 'var(--color-bg)'
+                            }}>
+                              {filteredDevices.filter(d => d.deviceType === inlineGroupType).map(d => {
+                                const isSelected = inlineGroupSelectedDevices.includes(d.devEUI);
+                                return (
+                                  <label
+                                    key={d.devEUI}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      fontSize: 11,
+                                      padding: '4px 6px',
+                                      borderRadius: 4,
+                                      background: isSelected ? 'var(--teal-bg)' : 'transparent',
+                                      cursor: 'pointer',
+                                      userSelect: 'none'
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setInlineGroupSelectedDevices([...inlineGroupSelectedDevices, d.devEUI]);
+                                        } else {
+                                          setInlineGroupSelectedDevices(inlineGroupSelectedDevices.filter(id => id !== d.devEUI));
+                                        }
+                                      }}
+                                      style={{ accentColor: 'var(--teal)' }}
+                                    />
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontWeight: 550 }}>{d.name}</span>
+                                      <span style={{ fontSize: 8, color: 'var(--color-hint)' }}>{d.devEUI}</span>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                              {filteredDevices.filter(d => d.deviceType === inlineGroupType).length === 0 && (
+                                <div style={{ fontSize: 10, color: 'var(--color-hint)', textAlign: 'center', padding: 8 }}>
+                                  No hay dispositivos disponibles de este tipo.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setShowNewGroupForm(false)}
+                              style={{ padding: '2px 8px', fontSize: 11, height: 28, minWidth: 'auto' }}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => {
+                                if (!inlineGroupName.trim() || inlineGroupSelectedDevices.length === 0) {
+                                  alert('Ingresa el nombre del conjunto y elige al menos un sensor.');
+                                  return;
+                                }
+                                const newId = 'grp-' + Math.random().toString(36).substr(2, 9);
+                                const targetOrg = user?.role === 'superadmin' ? editDashOrgId || newDashOrgId || 'org1' : user?.organizationId || 'org1';
+                                
+                                const newGroup: DeviceGroup = {
+                                  id: newId,
+                                  name: inlineGroupName.trim(),
+                                  deviceType: inlineGroupType,
+                                  deviceEUIs: inlineGroupSelectedDevices,
+                                  organizationId: targetOrg,
+                                  createdAt: new Date().toISOString()
+                                };
+
+                                const saved = localStorage.getItem('device_groups');
+                                const allGroups: DeviceGroup[] = saved ? JSON.parse(saved) : [];
+                                const updatedGroups = [...allGroups, newGroup];
+                                localStorage.setItem('device_groups', JSON.stringify(updatedGroups));
+
+                                setDeviceGroups(updatedGroups);
+                                setNewWidgetDeviceGroupId(newId);
+                                
+                                // Asignar métricas por defecto
+                                if (inlineGroupType === 'water_meter') {
+                                  setNewWidgetMetric('flow');
+                                  setNewWidgetUnit('L/h');
+                                  setNewWidgetColor('teal');
+                                } else {
+                                  setNewWidgetMetric('fillLevel');
+                                  setNewWidgetUnit('%');
+                                  setNewWidgetColor('amber');
+                                }
+
+                                setShowNewGroupForm(false);
+                                setInlineGroupName('');
+                                setInlineGroupSelectedDevices([]);
+                              }}
+                              style={{ padding: '2px 10px', fontSize: 11, height: 28, background: 'var(--teal)', color: 'white', minWidth: 'auto' }}
+                            >
+                              Crear y Seleccionar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2032,10 +2558,25 @@ export default function DashboardPage() {
                 type="button" 
                 className="btn-primary" 
                 onClick={handleSaveWidget} 
-                disabled={!newWidgetTitle.trim() || (newWidgetType !== 'bar' && newWidgetType !== 'map' && !newWidgetDevice)}
+                disabled={
+                  !newWidgetTitle.trim() || 
+                  (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
+                    (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
+                  )
+                }
                 style={{ 
-                  opacity: (!newWidgetTitle.trim() || (newWidgetType !== 'bar' && newWidgetType !== 'map' && !newWidgetDevice)) ? 0.6 : 1,
-                  cursor: (!newWidgetTitle.trim() || (newWidgetType !== 'bar' && newWidgetType !== 'map' && !newWidgetDevice)) ? 'not-allowed' : 'pointer'
+                  opacity: (
+                    !newWidgetTitle.trim() || 
+                    (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
+                      (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
+                    )
+                  ) ? 0.6 : 1,
+                  cursor: (
+                    !newWidgetTitle.trim() || 
+                    (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
+                      (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
+                    )
+                  ) ? 'not-allowed' : 'pointer'
                 }}
               >
                 {drawerMode === 'add' ? 'Agregar Panel' : 'Guardar Cambios'}
@@ -2043,6 +2584,51 @@ export default function DashboardPage() {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Notificación flotante de alertas en tiempo real (Rule Engine Toast) */}
+      {activeToast && (
+        <div 
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 9999,
+            background: activeToast.severity === 'critical' ? '#ef4444' : activeToast.severity === 'warning' ? '#f59e0b' : '#0d9488',
+            color: '#ffffff',
+            padding: '12px 18px',
+            borderRadius: 12,
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            maxWidth: 380,
+            animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{activeToast.title}</div>
+            <div style={{ fontSize: 11, marginTop: 2, opacity: 0.95, lineHeight: 1.4 }}>{activeToast.message}</div>
+          </div>
+          <button 
+            onClick={() => setActiveToast(null)} 
+            style={{
+              background: 'rgba(255, 255, 255, 0.2)',
+              border: 'none',
+              borderRadius: '50%',
+              color: 'inherit',
+              cursor: 'pointer',
+              width: 22,
+              height: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
 
