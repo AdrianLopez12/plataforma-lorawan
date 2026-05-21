@@ -112,6 +112,7 @@ export interface DashboardWidget {
   color?: 'teal' | 'blue' | 'amber' | 'purple' | 'red' | 'gray';
   width: 'third' | 'half' | 'two-thirds' | 'full';   // column width in the dashboard grid
   icon?: string;            // icon chosen for the panel
+  tableColumns?: string[];   // selected columns to show in a table widget
 }
 
 export interface CustomDashboard {

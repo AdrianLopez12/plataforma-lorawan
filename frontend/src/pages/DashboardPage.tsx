@@ -41,6 +41,21 @@ const mapIcons: Record<string, L.DivIcon> = {
   })
 };
 
+const AVAILABLE_TABLE_COLUMNS = [
+  { key: 'receivedAt', label: 'Fecha/Hora', category: 'base' },
+  { key: 'rssi', label: 'Señal RSSI (dBm)', category: 'base' },
+  { key: 'snr', label: 'Ruido SNR (dB)', category: 'base' },
+  { key: 'fPort', label: 'Puerto fPort', category: 'base' },
+  { key: 'fCnt', label: 'Contador fCnt', category: 'base' },
+  { key: 'flow', label: 'Caudal (L/h)', category: 'telemetry' },
+  { key: 'level', label: 'Nivel (cm)', category: 'telemetry' },
+  { key: 'fillLevel', label: 'Llenado (%)', category: 'telemetry' },
+  { key: 'temperature', label: 'Temperatura (°C)', category: 'telemetry' },
+  { key: 'battery', label: 'Batería (%)', category: 'telemetry' },
+  { key: 'pressure', label: 'Presión (bar)', category: 'telemetry' },
+  { key: 'totalConsumption', label: 'Consumo (m³)', category: 'telemetry' }
+];
+
 const DEFAULT_DASHBOARD: CustomDashboard = {
   id: 'dash-default',
   name: 'Dashboard Principal',
@@ -96,6 +111,7 @@ export default function DashboardPage() {
   const [newWidgetWidth, setNewWidgetWidth] = useState<'third' | 'half' | 'two-thirds' | 'full'>('half');
   const [newWidgetIcon, setNewWidgetIcon] = useState('Gauge');
   const [newWidgetSelectedDevices, setNewWidgetSelectedDevices] = useState<string[]>([]);
+  const [newWidgetTableColumns, setNewWidgetTableColumns] = useState<string[]>([]);
 
   // Cache para historiales de telemetría de widgets
   const [telemetryHistory, setTelemetryHistory] = useState<Record<string, TelemetryRecord[]>>({});
@@ -352,6 +368,7 @@ export default function DashboardPage() {
     setNewWidgetWidth('half');
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
+    setNewWidgetTableColumns(['receivedAt', 'rssi', 'snr', 'flow']);
     setEditingWidget(null);
     setDrawerMode('add');
   };
@@ -367,6 +384,7 @@ export default function DashboardPage() {
     setNewWidgetWidth(widget.width || 'half');
     setNewWidgetIcon(widget.icon || 'Gauge');
     setNewWidgetSelectedDevices(widget.selectedDevices || []);
+    setNewWidgetTableColumns(widget.tableColumns || ['receivedAt', 'rssi', 'snr', 'flow']);
     setDrawerMode('edit');
   };
 
@@ -385,7 +403,8 @@ export default function DashboardPage() {
         metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
         color: newWidgetColor,
         width: newWidgetWidth,
-        icon: newWidgetIcon
+        icon: newWidgetIcon,
+        tableColumns: newWidgetType === 'table' ? newWidgetTableColumns : undefined
       };
 
       const updated = dashboards.map(dash => {
@@ -414,7 +433,8 @@ export default function DashboardPage() {
               metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
               color: newWidgetColor,
               width: newWidgetWidth,
-              icon: newWidgetIcon
+              icon: newWidgetIcon,
+              tableColumns: newWidgetType === 'table' ? newWidgetTableColumns : undefined
             } : w)
           };
         }
@@ -436,6 +456,7 @@ export default function DashboardPage() {
     setNewWidgetWidth('half');
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
+    setNewWidgetTableColumns([]);
   };
 
   const handleDeleteWidget = (widgetId: string) => {
@@ -633,35 +654,86 @@ export default function DashboardPage() {
       }
       case 'table': {
         const history = telemetryHistory[widget.deviceEUI || ''] || [];
+        
+        // Determinar las columnas activas a mostrar
+        const activeCols = widget.tableColumns && widget.tableColumns.length > 0
+          ? widget.tableColumns
+          : (targetDevice?.deviceType === 'water_meter'
+              ? ['receivedAt', 'rssi', 'flow', 'level']
+              : (targetDevice?.deviceType === 'smartbin'
+                  ? ['receivedAt', 'rssi', 'fillLevel', 'temperature']
+                  : ['receivedAt', 'rssi', 'snr']));
+
+        const getColLabel = (key: string) => {
+          const colDef = AVAILABLE_TABLE_COLUMNS.find(c => c.key === key);
+          return colDef ? colDef.label : key;
+        };
+
+        const renderCell = (key: string, h: TelemetryRecord) => {
+          const payload = h.decodedPayload as Record<string, any>;
+          switch (key) {
+            case 'receivedAt':
+              return format(new Date(h.receivedAt), 'dd/MM HH:mm:ss');
+            case 'rssi':
+              return `${h.rssi} dBm`;
+            case 'snr':
+              return `${h.snr} dB`;
+            case 'fPort':
+              return h.fPort;
+            case 'fCnt':
+              return h.fCnt;
+            default:
+              const val = payload?.[key];
+              if (val === null || val === undefined) return '—';
+              
+              let unitSuffix = '';
+              if (key === 'flow') unitSuffix = ' L/h';
+              else if (key === 'level') unitSuffix = ' cm';
+              else if (key === 'fillLevel') unitSuffix = ' %';
+              else if (key === 'temperature') unitSuffix = ' °C';
+              else if (key === 'battery') unitSuffix = ' %';
+              else if (key === 'pressure') unitSuffix = ' bar';
+              else if (key === 'totalConsumption') unitSuffix = ' m³';
+              
+              return `${typeof val === 'number' ? val.toFixed(1) : String(val)}${unitSuffix}`;
+          }
+        };
+
         return (
           <div style={{ marginTop: 12, overflowX: 'auto', maxHeight: 200, overflowY: 'auto' }}>
             <table className="table" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Hora</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>RSSI/SNR</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Payload Decodificado</th>
+                  {activeCols.map(colKey => (
+                    <th key={colKey} style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      {getColLabel(colKey)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {history.length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>
+                    <td colSpan={activeCols.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>
                       No hay telemetrías registradas
                     </td>
                   </tr>
                 ) : (
                   history.slice(0, 10).map((h, i) => (
                     <tr key={i} style={{ borderBottom: '0.5px solid var(--color-border)' }}>
-                      <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
-                        {format(new Date(h.receivedAt), 'dd/MM HH:mm:ss')}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        {h.rssi} dBm / {h.snr} dB
-                      </td>
-                      <td style={{ padding: '8px', fontFamily: 'monospace', color: '#107c10' }}>
-                        {JSON.stringify(h.decodedPayload)}
-                      </td>
+                      {activeCols.map(colKey => (
+                        <td 
+                          key={colKey} 
+                          style={{ 
+                            padding: '8px', 
+                            whiteSpace: colKey === 'receivedAt' ? 'nowrap' : 'normal',
+                            fontFamily: (colKey === 'rssi' || colKey === 'snr' || colKey === 'fPort' || colKey === 'fCnt') ? 'monospace' : 'inherit',
+                            color: colKey === 'receivedAt' ? 'var(--color-text)' : 'inherit'
+                          }}
+                        >
+                          {renderCell(colKey, h)}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}
@@ -1391,6 +1463,122 @@ export default function DashboardPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* 4. SELECCIÓN DE COLUMNAS DE LA TABLA (SOLO TIPO TABLA) */}
+              {newWidgetType === 'table' && (
+                <div className="form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label className="form-label" style={{ fontWeight: 650, margin: 0 }}>
+                      4. Columnas de la Tabla a Mostrar *
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setNewWidgetTableColumns(AVAILABLE_TABLE_COLUMNS.map(col => col.key))}
+                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto' }}
+                      >
+                        Todas
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setNewWidgetTableColumns([])}
+                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto' }}
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  </div>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--color-muted)', lineHeight: '1.4' }}>
+                    Marca las columnas que deseas visualizar en la bitácora de telemetría de este panel.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Campos Base de Red */}
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Campos del Sistema (Red LoRaWAN)</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', marginTop: '6px' }}>
+                        {AVAILABLE_TABLE_COLUMNS.filter(c => c.category === 'base').map(c => {
+                          const isChecked = newWidgetTableColumns.includes(c.key);
+                          return (
+                            <label
+                              key={c.key}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 10px',
+                                border: isChecked ? '1.5px solid var(--teal)' : '1px solid var(--color-border)',
+                                borderRadius: '6px',
+                                background: isChecked ? 'var(--teal-bg)' : 'var(--color-surface)',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setNewWidgetTableColumns([...newWidgetTableColumns, c.key]);
+                                  } else {
+                                    setNewWidgetTableColumns(newWidgetTableColumns.filter(k => k !== c.key));
+                                  }
+                                }}
+                                style={{ accentColor: 'var(--teal)', cursor: 'pointer' }}
+                              />
+                              <span>{c.label.split(' ')[0]}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Campos de Telemetría Decodificados */}
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Métricas de Sensores IoT (Decodificado)</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', marginTop: '6px' }}>
+                        {AVAILABLE_TABLE_COLUMNS.filter(c => c.category === 'telemetry').map(c => {
+                          const isChecked = newWidgetTableColumns.includes(c.key);
+                          return (
+                            <label
+                              key={c.key}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 10px',
+                                border: isChecked ? '1.5px solid var(--teal)' : '1px solid var(--color-border)',
+                                borderRadius: '6px',
+                                background: isChecked ? 'var(--teal-bg)' : 'var(--color-surface)',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setNewWidgetTableColumns([...newWidgetTableColumns, c.key]);
+                                  } else {
+                                    setNewWidgetTableColumns(newWidgetTableColumns.filter(k => k !== c.key));
+                                  }
+                                }}
+                                style={{ accentColor: 'var(--teal)', cursor: 'pointer' }}
+                              />
+                              <span>{c.label.split(' ')[0]}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
