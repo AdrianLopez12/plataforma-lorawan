@@ -10,7 +10,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getDevices, getDeviceTelemetry } from '../services/api';
-import type { Device, TelemetryRecord, CustomDashboard, DashboardWidget } from '../types';
+import type { Device, TelemetryRecord, CustomDashboard, DashboardWidget, TableColumnConfig } from '../types';
 import { format } from 'date-fns';
 import { generateTelemetryHistory } from '../services/mockData';
 import { useAuth } from '../context/AuthContext';
@@ -55,6 +55,47 @@ const AVAILABLE_TABLE_COLUMNS = [
   { key: 'pressure', label: 'Presión (bar)', category: 'telemetry' },
   { key: 'totalConsumption', label: 'Consumo (m³)', category: 'telemetry' }
 ];
+
+const resolveTableColumns = (
+  tableColumns?: (string | TableColumnConfig)[],
+  deviceType?: string
+): TableColumnConfig[] => {
+  if (!tableColumns || tableColumns.length === 0) {
+    const defaultKeys = deviceType === 'water_meter'
+      ? ['receivedAt', 'rssi', 'flow', 'level']
+      : (deviceType === 'smartbin'
+          ? ['receivedAt', 'rssi', 'fillLevel', 'temperature']
+          : ['receivedAt', 'rssi', 'snr']);
+    return defaultKeys.map(k => {
+      const def = AVAILABLE_TABLE_COLUMNS.find(c => c.key === k);
+      let unit: string | undefined = undefined;
+      if (def && def.label.includes('(')) {
+        unit = def.label.substring(def.label.indexOf('(') + 1, def.label.indexOf(')'));
+      }
+      return {
+        key: k,
+        label: def ? def.label.split(' ')[0] : k,
+        unit
+      };
+    });
+  }
+
+  return tableColumns.map(col => {
+    if (typeof col === 'string') {
+      const def = AVAILABLE_TABLE_COLUMNS.find(c => c.key === col);
+      let unit: string | undefined = undefined;
+      if (def && def.label.includes('(')) {
+        unit = def.label.substring(def.label.indexOf('(') + 1, def.label.indexOf(')'));
+      }
+      return {
+        key: col,
+        label: def ? def.label.split(' ')[0] : col,
+        unit
+      };
+    }
+    return col;
+  });
+};
 
 const DEFAULT_DASHBOARD: CustomDashboard = {
   id: 'dash-default',
@@ -111,7 +152,14 @@ export default function DashboardPage() {
   const [newWidgetWidth, setNewWidgetWidth] = useState<'third' | 'half' | 'two-thirds' | 'full'>('half');
   const [newWidgetIcon, setNewWidgetIcon] = useState('Gauge');
   const [newWidgetSelectedDevices, setNewWidgetSelectedDevices] = useState<string[]>([]);
-  const [newWidgetTableColumns, setNewWidgetTableColumns] = useState<string[]>([]);
+  const [newWidgetTableColumns, setNewWidgetTableColumns] = useState<TableColumnConfig[]>([]);
+
+  // Estados para agregar columnas dinámicamente en la bitácora
+  const [tempColLabel, setTempColLabel] = useState('');
+  const [tempColKey, setTempColKey] = useState('');
+  const [tempColCustomKey, setTempColCustomKey] = useState('');
+  const [tempColUnit, setTempColUnit] = useState('');
+  const [showAddColForm, setShowAddColForm] = useState(false);
 
   // Cache para historiales de telemetría de widgets
   const [telemetryHistory, setTelemetryHistory] = useState<Record<string, TelemetryRecord[]>>({});
@@ -368,7 +416,7 @@ export default function DashboardPage() {
     setNewWidgetWidth('half');
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
-    setNewWidgetTableColumns(['receivedAt', 'rssi', 'snr', 'flow']);
+    setNewWidgetTableColumns(resolveTableColumns(undefined, undefined));
     setEditingWidget(null);
     setDrawerMode('add');
   };
@@ -384,7 +432,9 @@ export default function DashboardPage() {
     setNewWidgetWidth(widget.width || 'half');
     setNewWidgetIcon(widget.icon || 'Gauge');
     setNewWidgetSelectedDevices(widget.selectedDevices || []);
-    setNewWidgetTableColumns(widget.tableColumns || ['receivedAt', 'rssi', 'snr', 'flow']);
+    
+    const targetDev = devices.find(d => d.devEUI === widget.deviceEUI);
+    setNewWidgetTableColumns(resolveTableColumns(widget.tableColumns, targetDev?.deviceType));
     setDrawerMode('edit');
   };
 
@@ -457,6 +507,13 @@ export default function DashboardPage() {
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
     setNewWidgetTableColumns([]);
+    
+    // Reset temp column states
+    setTempColLabel('');
+    setTempColKey('');
+    setTempColCustomKey('');
+    setTempColUnit('');
+    setShowAddColForm(false);
   };
 
   const handleDeleteWidget = (widgetId: string) => {
@@ -654,22 +711,10 @@ export default function DashboardPage() {
       }
       case 'table': {
         const history = telemetryHistory[widget.deviceEUI || ''] || [];
-        
-        // Determinar las columnas activas a mostrar
-        const activeCols = widget.tableColumns && widget.tableColumns.length > 0
-          ? widget.tableColumns
-          : (targetDevice?.deviceType === 'water_meter'
-              ? ['receivedAt', 'rssi', 'flow', 'level']
-              : (targetDevice?.deviceType === 'smartbin'
-                  ? ['receivedAt', 'rssi', 'fillLevel', 'temperature']
-                  : ['receivedAt', 'rssi', 'snr']));
+        const resolvedCols = resolveTableColumns(widget.tableColumns, targetDevice?.deviceType);
 
-        const getColLabel = (key: string) => {
-          const colDef = AVAILABLE_TABLE_COLUMNS.find(c => c.key === key);
-          return colDef ? colDef.label : key;
-        };
-
-        const renderCell = (key: string, h: TelemetryRecord) => {
+        const renderCell = (col: TableColumnConfig, h: TelemetryRecord) => {
+          const key = col.key;
           const payload = h.decodedPayload as Record<string, any>;
           switch (key) {
             case 'receivedAt':
@@ -682,18 +727,22 @@ export default function DashboardPage() {
               return h.fPort;
             case 'fCnt':
               return h.fCnt;
+            case 'devEUI':
+              return h.devEUI;
             default:
               const val = payload?.[key];
               if (val === null || val === undefined) return '—';
               
-              let unitSuffix = '';
-              if (key === 'flow') unitSuffix = ' L/h';
-              else if (key === 'level') unitSuffix = ' cm';
-              else if (key === 'fillLevel') unitSuffix = ' %';
-              else if (key === 'temperature') unitSuffix = ' °C';
-              else if (key === 'battery') unitSuffix = ' %';
-              else if (key === 'pressure') unitSuffix = ' bar';
-              else if (key === 'totalConsumption') unitSuffix = ' m³';
+              let unitSuffix = col.unit ? ` ${col.unit}` : '';
+              if (!col.unit) {
+                if (key === 'flow') unitSuffix = ' L/h';
+                else if (key === 'level') unitSuffix = ' cm';
+                else if (key === 'fillLevel') unitSuffix = ' %';
+                else if (key === 'temperature') unitSuffix = ' °C';
+                else if (key === 'battery') unitSuffix = ' %';
+                else if (key === 'pressure') unitSuffix = ' bar';
+                else if (key === 'totalConsumption') unitSuffix = ' m³';
+              }
               
               return `${typeof val === 'number' ? val.toFixed(1) : String(val)}${unitSuffix}`;
           }
@@ -704,9 +753,9 @@ export default function DashboardPage() {
             <table className="table" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-                  {activeCols.map(colKey => (
-                    <th key={colKey} style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {getColLabel(colKey)}
+                  {resolvedCols.map((col, idx) => (
+                    <th key={`${col.key}-${idx}`} style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      {col.label} {col.unit && col.key !== 'rssi' && col.key !== 'snr' ? `(${col.unit})` : ''}
                     </th>
                   ))}
                 </tr>
@@ -714,24 +763,24 @@ export default function DashboardPage() {
               <tbody>
                 {history.length === 0 ? (
                   <tr>
-                    <td colSpan={activeCols.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>
+                    <td colSpan={resolvedCols.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>
                       No hay telemetrías registradas
                     </td>
                   </tr>
                 ) : (
                   history.slice(0, 10).map((h, i) => (
                     <tr key={i} style={{ borderBottom: '0.5px solid var(--color-border)' }}>
-                      {activeCols.map(colKey => (
+                      {resolvedCols.map((col, idx) => (
                         <td 
-                          key={colKey} 
+                          key={`${col.key}-${idx}`} 
                           style={{ 
                             padding: '8px', 
-                            whiteSpace: colKey === 'receivedAt' ? 'nowrap' : 'normal',
-                            fontFamily: (colKey === 'rssi' || colKey === 'snr' || colKey === 'fPort' || colKey === 'fCnt') ? 'monospace' : 'inherit',
-                            color: colKey === 'receivedAt' ? 'var(--color-text)' : 'inherit'
+                            whiteSpace: col.key === 'receivedAt' ? 'nowrap' : 'normal',
+                            fontFamily: (col.key === 'rssi' || col.key === 'snr' || col.key === 'fPort' || col.key === 'fCnt' || col.key === 'devEUI') ? 'monospace' : 'inherit',
+                            color: col.key === 'receivedAt' ? 'var(--color-text)' : 'inherit'
                           }}
                         >
-                          {renderCell(colKey, h)}
+                          {renderCell(col, h)}
                         </td>
                       ))}
                     </tr>
@@ -1467,120 +1516,346 @@ export default function DashboardPage() {
               )}
 
               {/* 4. SELECCIÓN DE COLUMNAS DE LA TABLA (SOLO TIPO TABLA) */}
-              {newWidgetType === 'table' && (
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label className="form-label" style={{ fontWeight: 650, margin: 0 }}>
-                      4. Columnas de la Tabla a Mostrar *
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+              {newWidgetType === 'table' && (() => {
+                const selectedDeviceTelemetry = telemetryHistory[newWidgetDevice] || [];
+                const latestTelemetry = selectedDeviceTelemetry[0];
+                const detectedParams = latestTelemetry && latestTelemetry.decodedPayload
+                  ? Object.keys(latestTelemetry.decodedPayload)
+                  : [];
+
+                return (
+                  <div className="form-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="form-label" style={{ fontWeight: 650, margin: 0 }}>
+                        4. Columnas de la Tabla a Mostrar *
+                      </label>
+                    </div>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--color-muted)', lineHeight: '1.4' }}>
+                      Gestiona, reordena y agrega las columnas dinámicas que deseas visualizar en la bitácora de este panel.
+                    </p>
+
+                    {/* Lista de columnas activas */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                      {newWidgetTableColumns.length === 0 ? (
+                        <div style={{ padding: '12px', border: '1px dashed var(--color-border)', borderRadius: '8px', textAlign: 'center', fontSize: '12px', color: 'var(--color-muted)' }}>
+                          No hay columnas configuradas. Agrega una o carga un preset.
+                        </div>
+                      ) : (
+                        newWidgetTableColumns.map((col, index) => (
+                          <div 
+                            key={`${col.key}-${index}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 12px',
+                              background: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '8px',
+                              fontSize: '13px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{col.label}</span>
+                              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--color-muted)', background: 'var(--color-bg)', padding: '2px 6px', borderRadius: '4px' }}>
+                                {col.key}
+                              </span>
+                              {col.unit && (
+                                <span style={{ fontSize: '11px', color: 'var(--teal)', fontWeight: 500, background: 'var(--teal-bg)', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {col.unit}
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => {
+                                  const updated = [...newWidgetTableColumns];
+                                  const temp = updated[index];
+                                  updated[index] = updated[index - 1];
+                                  updated[index - 1] = temp;
+                                  setNewWidgetTableColumns(updated);
+                                }}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '11px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: index === 0 ? 'var(--color-border)' : 'var(--color-muted)',
+                                  cursor: index === 0 ? 'default' : 'pointer',
+                                  fontWeight: 'bold'
+                                }}
+                                title="Mover arriba"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === newWidgetTableColumns.length - 1}
+                                onClick={() => {
+                                  const updated = [...newWidgetTableColumns];
+                                  const temp = updated[index];
+                                  updated[index] = updated[index + 1];
+                                  updated[index + 1] = temp;
+                                  setNewWidgetTableColumns(updated);
+                                }}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '11px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: index === newWidgetTableColumns.length - 1 ? 'var(--color-border)' : 'var(--color-muted)',
+                                  cursor: index === newWidgetTableColumns.length - 1 ? 'default' : 'pointer',
+                                  fontWeight: 'bold'
+                                }}
+                                title="Mover abajo"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewWidgetTableColumns(newWidgetTableColumns.filter((_, i) => i !== index));
+                                }}
+                                style={{
+                                  padding: '4px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: 'var(--color-red, #dc3545)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginLeft: '4px'
+                                }}
+                                title="Eliminar columna"
+                              >
+                                <Trash size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Formulario para agregar columna */}
+                    {!showAddColForm ? (
                       <button
                         type="button"
                         className="btn-secondary"
-                        onClick={() => setNewWidgetTableColumns(AVAILABLE_TABLE_COLUMNS.map(col => col.key))}
-                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto' }}
+                        onClick={() => {
+                          setShowAddColForm(true);
+                          setTempColLabel('');
+                          setTempColKey(detectedParams.length > 0 ? detectedParams[0] : 'receivedAt');
+                          setTempColCustomKey('');
+                          setTempColUnit('');
+                        }}
+                        style={{
+                          width: '100%',
+                          border: '1.5px dashed var(--color-border)',
+                          background: 'transparent',
+                          borderRadius: '8px',
+                          padding: '10px',
+                          color: 'var(--teal)',
+                          fontWeight: 500,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          minHeight: '38px'
+                        }}
                       >
-                        Todas
+                        <Plus size={15} /> Agregar Columna Personalizada
+                      </button>
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        border: '1px dashed var(--teal)',
+                        borderRadius: '8px',
+                        background: 'rgba(29, 158, 117, 0.04)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        animation: 'fadeIn 0.2s ease'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--teal)', borderBottom: '1px solid rgba(29, 158, 117, 0.15)', paddingBottom: '4px', marginBottom: '2px' }}>
+                          Nueva Columna de Bitácora
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px', fontWeight: 600 }}>Nombre / Etiqueta *</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Ej. Nivel, Caudal"
+                              value={tempColLabel}
+                              onChange={(e) => setTempColLabel(e.target.value)}
+                              style={{ fontSize: '12px', padding: '6px 10px', minHeight: '36px' }}
+                            />
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px', fontWeight: 600 }}>Unidad (Opcional)</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Ej. L/min, °C, %"
+                              value={tempColUnit}
+                              onChange={(e) => setTempColUnit(e.target.value)}
+                              style={{ fontSize: '12px', padding: '6px 10px', minHeight: '36px' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px', fontWeight: 600 }}>Parámetro del Dispositivo *</label>
+                          <select
+                            className="form-input"
+                            value={tempColKey}
+                            onChange={(e) => setTempColKey(e.target.value)}
+                            style={{ fontSize: '12px', padding: '6px 10px', minHeight: '36px', backgroundPosition: 'calc(100% - 10px) 50%' }}
+                          >
+                            {/* Sección 1: Parámetros autodetectados */}
+                            {detectedParams.length > 0 && (
+                              <optgroup label={`Parámetros detectados en ${devices.find(d => d.devEUI === newWidgetDevice)?.name || 'sensor'}`}>
+                                {detectedParams.map(param => (
+                                  <option key={param} value={param}>{param}</option>
+                                ))}
+                              </optgroup>
+                            )}
+
+                            {/* Sección 2: Comunes */}
+                            <optgroup label="Parámetros Comunes de Telemetría">
+                              <option value="flow">flow (Caudal)</option>
+                              <option value="level">level (Nivel)</option>
+                              <option value="fillLevel">fillLevel (Llenado)</option>
+                              <option value="temperature">temperature (Temperatura)</option>
+                              <option value="battery">battery (Batería)</option>
+                              <option value="pressure">pressure (Presión)</option>
+                              <option value="totalConsumption">totalConsumption (Consumo)</option>
+                              <option value="vibration">vibration (Vibración)</option>
+                              <option value="humidity">humidity (Humedad)</option>
+                              <option value="status">status (Estado)</option>
+                            </optgroup>
+
+                            {/* Sección 3: Sistema */}
+                            <optgroup label="Campos del Sistema (Red)">
+                              <option value="receivedAt">receivedAt (Fecha y Hora)</option>
+                              <option value="rssi">rssi (Señal RSSI)</option>
+                              <option value="snr">snr (Ruido SNR)</option>
+                              <option value="fPort">fPort (Puerto LoRa)</option>
+                              <option value="fCnt">fCnt (Contador de Tramas)</option>
+                              <option value="devEUI">devEUI (EUI Dispositivo)</option>
+                            </optgroup>
+
+                            {/* Campo de escritura manual */}
+                            <optgroup label="Otro">
+                              <option value="custom_manual">Escribir parámetro personalizado...</option>
+                            </optgroup>
+                          </select>
+                        </div>
+
+                        {tempColKey === 'custom_manual' && (
+                          <div className="form-group" style={{ margin: 0, animation: 'fadeIn 0.15s ease' }}>
+                            <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px', fontWeight: 600 }}>Escribe el parámetro exacto *</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Ej. tension_red, ph_valor"
+                              value={tempColCustomKey}
+                              onChange={(e) => setTempColCustomKey(e.target.value)}
+                              style={{ fontSize: '12px', padding: '6px 10px', minHeight: '36px' }}
+                            />
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => setShowAddColForm(false)}
+                            style={{ padding: '4px 10px', fontSize: '12px', minHeight: '32px', height: '32px', minWidth: 'auto' }}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => {
+                              const finalKey = tempColKey === 'custom_manual' ? tempColCustomKey.trim() : tempColKey;
+                              if (!tempColLabel.trim()) {
+                                alert('Escribe el nombre/etiqueta de la columna.');
+                                return;
+                              }
+                              if (!finalKey) {
+                                alert('Selecciona o escribe el parámetro del dispositivo.');
+                                return;
+                              }
+                              
+                              const newCol: TableColumnConfig = {
+                                key: finalKey,
+                                label: tempColLabel.trim(),
+                                unit: tempColUnit.trim() || undefined
+                              };
+
+                              setNewWidgetTableColumns([...newWidgetTableColumns, newCol]);
+                              
+                              setTempColLabel('');
+                              setTempColCustomKey('');
+                              setTempColUnit('');
+                              setShowAddColForm(false);
+                            }}
+                            style={{ padding: '4px 12px', fontSize: '12px', minHeight: '32px', height: '32px', background: 'var(--teal)', color: 'white', minWidth: 'auto' }}
+                          >
+                            Agregar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botones de presets rápidos */}
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          const defaultWater = resolveTableColumns(undefined, 'water_meter');
+                          setNewWidgetTableColumns(defaultWater);
+                        }}
+                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 1 }}
+                      >
+                        Preset Medidor💧
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          const defaultBin = resolveTableColumns(undefined, 'smartbin');
+                          setNewWidgetTableColumns(defaultBin);
+                        }}
+                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 1 }}
+                      >
+                        Preset SmartBin🗑️
                       </button>
                       <button
                         type="button"
                         className="btn-secondary"
                         onClick={() => setNewWidgetTableColumns([])}
-                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto' }}
+                        style={{ padding: '2px 4px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 0.5 }}
                       >
-                        Limpiar
+                        Limpiar🧹
                       </button>
                     </div>
                   </div>
-                  <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--color-muted)', lineHeight: '1.4' }}>
-                    Marca las columnas que deseas visualizar en la bitácora de telemetría de este panel.
-                  </p>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {/* Campos Base de Red */}
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Campos del Sistema (Red LoRaWAN)</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', marginTop: '6px' }}>
-                        {AVAILABLE_TABLE_COLUMNS.filter(c => c.category === 'base').map(c => {
-                          const isChecked = newWidgetTableColumns.includes(c.key);
-                          return (
-                            <label
-                              key={c.key}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '6px 10px',
-                                border: isChecked ? '1.5px solid var(--teal)' : '1px solid var(--color-border)',
-                                borderRadius: '6px',
-                                background: isChecked ? 'var(--teal-bg)' : 'var(--color-surface)',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setNewWidgetTableColumns([...newWidgetTableColumns, c.key]);
-                                  } else {
-                                    setNewWidgetTableColumns(newWidgetTableColumns.filter(k => k !== c.key));
-                                  }
-                                }}
-                                style={{ accentColor: 'var(--teal)', cursor: 'pointer' }}
-                              />
-                              <span>{c.label.split(' ')[0]}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Campos de Telemetría Decodificados */}
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Métricas de Sensores IoT (Decodificado)</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', marginTop: '6px' }}>
-                        {AVAILABLE_TABLE_COLUMNS.filter(c => c.category === 'telemetry').map(c => {
-                          const isChecked = newWidgetTableColumns.includes(c.key);
-                          return (
-                            <label
-                              key={c.key}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '6px 10px',
-                                border: isChecked ? '1.5px solid var(--teal)' : '1px solid var(--color-border)',
-                                borderRadius: '6px',
-                                background: isChecked ? 'var(--teal-bg)' : 'var(--color-surface)',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setNewWidgetTableColumns([...newWidgetTableColumns, c.key]);
-                                  } else {
-                                    setNewWidgetTableColumns(newWidgetTableColumns.filter(k => k !== c.key));
-                                  }
-                                }}
-                                style={{ accentColor: 'var(--teal)', cursor: 'pointer' }}
-                              />
-                              <span>{c.label.split(' ')[0]}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* 4. SELECCIÓN DE DISPOSITIVOS MULTIPLE (MAPA O BARRAS) */}
               {(newWidgetType === 'map' || newWidgetType === 'bar') && (

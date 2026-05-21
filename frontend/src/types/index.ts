@@ -101,6 +101,12 @@ export interface Integration {
 
 export type WidgetType = 'kpi' | 'line' | 'bar' | 'map' | 'table';
 
+export interface TableColumnConfig {
+  key: string;
+  label: string;
+  unit?: string;
+}
+
 export interface DashboardWidget {
   id: string;
   type: WidgetType;
@@ -112,7 +118,7 @@ export interface DashboardWidget {
   color?: 'teal' | 'blue' | 'amber' | 'purple' | 'red' | 'gray';
   width: 'third' | 'half' | 'two-thirds' | 'full';   // column width in the dashboard grid
   icon?: string;            // icon chosen for the panel
-  tableColumns?: string[];   // selected columns to show in a table widget
+  tableColumns?: (string | TableColumnConfig)[];   // selected columns to show in a table widget
 }
 
 export interface CustomDashboard {
