@@ -9,7 +9,7 @@ interface AuthContextType {
   
   // Clientes (Organizaciones) CRUD
   clients: Organization[];
-  addClient: (name: string, description?: string) => Organization;
+  addClient: (name: string, description?: string, parentId?: string) => Organization;
   updateClient: (id: string, name: string, description?: string) => void;
   deleteClient: (id: string) => void;
   
@@ -25,15 +25,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const DEFAULT_CLIENTS: Organization[] = [
-  { id: 'org1', name: 'Empresa Demo S.A.', description: 'Inquilino de prueba predeterminado', createdAt: new Date().toISOString() },
-  { id: 'org2', name: 'Servicios Públicos Quito', description: 'Inquilino para sector de agua', createdAt: new Date().toISOString() }
+  { id: 'plasticos_rival', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() }
 ];
 
 const DEFAULT_USERS: User[] = [
   { id: '1', name: 'Super Admin', email: 'super@lorawan.com', password: '123456', role: 'superadmin', createdAt: new Date().toISOString() },
-  { id: '2', name: 'Admin Empresa', email: 'admin@cliente.com', password: '123456', role: 'admin', organizationId: 'org1', createdAt: new Date().toISOString() },
-  { id: '3', name: 'Operador Demo', email: 'operador@cliente.com', password: '123456', role: 'operator', organizationId: 'org1', createdAt: new Date().toISOString() },
-  { id: '4', name: 'Admin Quito', email: 'admin@quito.com', password: '123456', role: 'admin', organizationId: 'org2', createdAt: new Date().toISOString() }
+  { id: '5', name: 'Admin Rival', email: 'admin@rival.com', password: '123456', role: 'admin', organizationId: 'plasticos_rival', createdAt: new Date().toISOString() }
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -43,36 +40,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sembrar datos e inicializar
   useEffect(() => {
-    // 1. Clientes
-    let storedClients = localStorage.getItem('custom_clients');
-    if (!storedClients) {
+    // Migración nuclear única para purgar toda la base local (dashboards, grupos, alarmas, sesiones, etc.)
+    if (!localStorage.getItem('db_wipe_v12')) {
+      localStorage.clear();
       localStorage.setItem('custom_clients', JSON.stringify(DEFAULT_CLIENTS));
-      storedClients = JSON.stringify(DEFAULT_CLIENTS);
+      localStorage.setItem('custom_users', JSON.stringify(DEFAULT_USERS));
+      localStorage.setItem('db_wipe_v12', 'true');
+      window.location.reload();
+      return;
     }
-    const parsedClients = JSON.parse(storedClients);
+
+    // 1. Clientes - Cargar de localStorage o sembrar asegurando que Plásticos Rival esté presente
+    const storedClients = localStorage.getItem('custom_clients');
+    let parsedClients = DEFAULT_CLIENTS;
+    if (storedClients) {
+      try {
+        const parsed = JSON.parse(storedClients);
+        // Asegurar que Plásticos Rival está presente
+        if (!parsed.some((c: any) => c.id === 'plasticos_rival')) {
+          parsed.push({ id: 'plasticos_rival', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() });
+        }
+        parsedClients = parsed;
+      } catch (e) {
+        console.error("Error parsing custom_clients:", e);
+      }
+    }
+    localStorage.setItem('custom_clients', JSON.stringify(parsedClients));
     setClients(parsedClients);
 
-    // 2. Usuarios
-    let storedUsers = localStorage.getItem('custom_users');
-    if (!storedUsers) {
-      localStorage.setItem('custom_users', JSON.stringify(DEFAULT_USERS));
-      storedUsers = JSON.stringify(DEFAULT_USERS);
+    // 2. Usuarios - Cargar de localStorage o sembrar asegurando que los predeterminados existan
+    const storedUsers = localStorage.getItem('custom_users');
+    let parsedUsers = DEFAULT_USERS;
+    if (storedUsers) {
+      try {
+        const parsed = JSON.parse(storedUsers);
+        DEFAULT_USERS.forEach((defaultUser) => {
+          if (!parsed.some((u: any) => u.email.toLowerCase() === defaultUser.email.toLowerCase())) {
+            parsed.push(defaultUser);
+          }
+        });
+        parsedUsers = parsed;
+      } catch (e) {
+        console.error("Error parsing custom_users:", e);
+      }
     }
-    const parsedUsers = JSON.parse(storedUsers);
+    localStorage.setItem('custom_users', JSON.stringify(parsedUsers));
     setUsers(parsedUsers);
 
     // 3. Cargar sesión activa
     const storedSessionUser = localStorage.getItem('user');
     if (storedSessionUser) {
-      const parsedSession = JSON.parse(storedSessionUser) as User;
-      // Verificar si el usuario aún existe y refrescar su estado
-      const matched = parsedUsers.find((u: User) => u.id === parsedSession.id);
-      if (matched) {
-        const { password: _, ...userWithoutPass } = matched;
-        setUser(userWithoutPass);
-      } else {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
+      try {
+        const parsedSession = JSON.parse(storedSessionUser) as User;
+        const matched = parsedUsers.find((u: User) => u.id === parsedSession.id);
+        if (matched) {
+          const { password: _, ...userWithoutPass } = matched;
+          setUser(userWithoutPass);
+        } else {
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+        }
+      } catch (e) {
+        console.error("Error parsing stored user:", e);
       }
     }
   }, []);
@@ -106,11 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('custom_clients', JSON.stringify(newClients));
   };
 
-  const addClient = (name: string, description?: string): Organization => {
+  const addClient = (name: string, description?: string, parentId?: string): Organization => {
     const newClient: Organization = {
       id: 'org_' + Math.random().toString(36).substring(2, 9),
       name,
       description: description || '',
+      parentId,
       createdAt: new Date().toISOString()
     };
     saveClientsToStore([...clients, newClient]);

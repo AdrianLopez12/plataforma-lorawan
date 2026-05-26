@@ -16,7 +16,7 @@ export class IntegrationController {
 
   @Post()
   create(
-    @Body() data: { name: string; description?: string; preset?: string },
+    @Body() data: { name: string; description?: string; preset?: string; organizationId?: string },
   ): Promise<Integration> {
     return this.integrationService.create(data);
   }

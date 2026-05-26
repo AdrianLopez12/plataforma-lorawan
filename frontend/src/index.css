@@ -511,6 +511,32 @@ select.form-input {
   overflow: hidden;
 }
 
+.slide-over-drawer.wide-drawer {
+  max-width: 820px;
+}
+
+.drawer-form-section {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.01);
+}
+
+.drawer-form-section-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+
 @keyframes slideInRight {
   from {
     transform: translateX(100%);
@@ -577,4 +603,121 @@ select.form-input {
   background: var(--teal-bg);
   border-color: var(--teal);
   color: var(--teal-dark);
+}
+
+/* Custom left-aligned slide-over drawer */
+.slide-over-overlay-left {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 1100;
+  display: flex;
+  justify-content: flex-start;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.slide-over-drawer-left {
+  width: 100%;
+  max-width: 580px;
+  height: 100%;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  box-shadow: 10px 0 25px -5px rgba(0, 0, 0, 0.15), 20px 0 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  animation: slideInLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Highlight for selected device in data-table */
+.data-table tr.selected td {
+  background: var(--teal-bg) !important;
+  font-weight: 550;
+  border-bottom-color: var(--teal);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-hint);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--teal);
+}
+
+/* Modern interactive transitions */
+.card, .stat-card, .btn-primary, .btn-secondary, .form-input, .device-select-item {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card:hover, .stat-card:hover {
+  transform: translateY(-2px) scale(1.002);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.04), 0 4px 16px -8px rgba(0, 0, 0, 0.02);
+  border-color: rgba(29, 158, 117, 0.15);
+}
+
+/* Glassmorphism premium utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+}
+
+.glass-dropdown {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+.searchable-select-option {
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.searchable-select-option:hover {
+  background: var(--color-bg) !important;
+  color: var(--teal-dark) !important;
+  padding-left: 16px !important; /* Micro-desplazamiento interactivo premium */
 }

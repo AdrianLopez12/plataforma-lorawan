@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Cpu, Copy, Play, Check, Send, AlertCircle, RefreshCw, Terminal, Save, 
-  Plus, Trash2, ArrowLeft, Settings, Code, FileText, X 
+  Plus, Trash2, ArrowLeft, Settings, Code, FileText, X, Maximize2, Minimize2, Info 
 } from 'lucide-react';
 import { 
   getIntegrations, createIntegration, updateIntegration, deleteIntegration, 
@@ -105,15 +105,7 @@ export default function IntegrationPage() {
   const [newIntPreset, setNewIntPreset] = useState('water_meter');
   const [creating, setCreating] = useState(false);
   const [newIntOrgId, setNewIntOrgId] = useState('org1');
-  const [integrationMappings, setIntegrationMappings] = useState<Record<string, string>>({});
 
-  // Cargar mappings al iniciar
-  useEffect(() => {
-    const stored = localStorage.getItem('integration_organization_mappings');
-    if (stored) {
-      setIntegrationMappings(JSON.parse(stored));
-    }
-  }, []);
 
   // Inicializar organización por defecto para nueva integración
   useEffect(() => {
@@ -129,6 +121,7 @@ export default function IntegrationPage() {
   const [copiedHeader, setCopiedHeader] = useState(false);
   const [savingDecoder, setSavingDecoder] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isExpandedEditor, setIsExpandedEditor] = useState(false);
 
   // Playground & Simulación
   const [payloadType, setPayloadType] = useState<'hex' | 'base64'>('hex');
@@ -256,18 +249,13 @@ export default function IntegrationPage() {
     if (!newIntName.trim()) return;
     setCreating(true);
     try {
+      const targetOrgId = user?.role === 'superadmin' ? newIntOrgId : (user?.organizationId || 'org1');
       const created = await createIntegration({
         name: newIntName,
         description: newIntDesc,
-        preset: newIntPreset
+        preset: newIntPreset,
+        organizationId: targetOrgId
       });
-
-      // Guardar mapping en localStorage
-      const stored = localStorage.getItem('integration_organization_mappings');
-      const currentMappings = stored ? JSON.parse(stored) : {};
-      currentMappings[created.id] = newIntOrgId;
-      localStorage.setItem('integration_organization_mappings', JSON.stringify(currentMappings));
-      setIntegrationMappings(currentMappings);
 
       setShowCreateModal(false);
       setNewIntName('');
@@ -329,7 +317,7 @@ export default function IntegrationPage() {
           throw new Error('Formato Hexadecimal inválido (debe tener longitud par)');
         }
         for (let i = 0; i < cleaned.length; i += 2) {
-          bytes.push(parseInt(cleaned.substring(i, 2), 16));
+          bytes.push(parseInt(cleaned.substring(i, i + 2), 16));
         }
       } else {
         const binary = atob(testPayload);
@@ -407,8 +395,8 @@ export default function IntegrationPage() {
 
   const filteredList = integrations.filter((int) => {
     if (user?.role === 'superadmin') return true;
-    const org = integrationMappings[int.id] || 'org1';
-    return org === user?.organizationId;
+    const org = int.organizationId || 'org1';
+    return org.split(',').map((s) => s.trim()).includes(user?.organizationId || '');
   });
 
   return (
@@ -483,7 +471,7 @@ export default function IntegrationPage() {
                         <div style={{ marginTop: 8, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Cliente:</span> 
                           <span style={{ color: '#854F0B', fontWeight: 550 }}>
-                            {clients.find(c => c.id === (integrationMappings[int.id] || 'org1'))?.name || 'Empresa Demo S.A.'}
+                            {clients.find(c => c.id === (int.organizationId || 'org1'))?.name || 'Empresa Demo S.A.'}
                           </span>
                         </div>
                       )}
@@ -700,11 +688,18 @@ export default function IntegrationPage() {
                     <label className="form-label">Asociar a Cliente (Multi-tenant)</label>
                     <select
                       className="form-input"
-                      value={integrationMappings[selectedIntegration.id] || 'org1'}
+                      value={selectedIntegration.organizationId || 'org1'}
                       onChange={(e) => {
-                        const updated = { ...integrationMappings, [selectedIntegration.id]: e.target.value };
-                        setIntegrationMappings(updated);
-                        localStorage.setItem('integration_organization_mappings', JSON.stringify(updated));
+                        const orgId = e.target.value;
+                        updateIntegration(selectedIntegration.id, { organizationId: orgId })
+                          .then(() => {
+                            setIntegrations(prev => prev.map(int => int.id === selectedIntegration.id ? { ...int, organizationId: orgId } : int));
+                            setSelectedIntegration(prev => prev ? { ...prev, organizationId: orgId } : null);
+                          })
+                          .catch((err) => {
+                            console.error("Error al asignar organización a la integración:", err);
+                            alert("No se pudo actualizar la organización de la integración.");
+                          });
                       }}
                       style={{ padding: '6px 12px', fontSize: 13, height: '36px' }}
                     >
@@ -828,6 +823,17 @@ export default function IntegrationPage() {
                       )}
                       <span>{saveSuccess ? 'Guardado con éxito' : 'Guardar Cambios'}</span>
                     </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setIsExpandedEditor(true)}
+                      style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                      title="Expandir Editor a pantalla completa"
+                    >
+                      <Maximize2 size={13} />
+                      <span>Expandir</span>
+                    </button>
                   </div>
                 </div>
 
@@ -840,19 +846,23 @@ export default function IntegrationPage() {
                       height: 380,
                       fontFamily: 'Consolas, Monaco, monospace',
                       fontSize: 12,
-                      background: '#121212',
-                      color: '#A9FFCD',
+                      background: '#1E293B',
+                      color: '#F8FAFC',
                       padding: 16,
                       borderRadius: 8,
-                      border: '1px solid #333',
+                      border: '1px solid var(--color-border)',
                       lineHeight: '1.5',
-                      resize: 'vertical'
+                      resize: 'vertical',
+                      outline: 'none'
                     }}
                   />
                 </div>
-                <p className="text-muted" style={{ fontSize: 11, marginTop: 8 }}>
-                  💡 Este script se evaluará en el sandbox del backend inmediatamente al recibir tramas LoRaWAN en este webhook.
+                 <p className="text-muted" style={{ fontSize: 11, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Info size={12} style={{ color: 'var(--teal)' }} />
+                  <span>Este script se evaluará en el sandbox del backend inmediatamente al recibir tramas LoRaWAN en este webhook.</span>
                 </p>
+
+                {/* MODAL FULLSCREEN EXPANDIDO (Movido a la raíz de la página) */}
               </div>
 
               {/* Sandbox Playground */}
@@ -978,6 +988,218 @@ export default function IntegrationPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* MODAL FULLSCREEN EXPANDIDO (Renderizado a nivel de raíz para evitar el bug de coordenadas 'position: fixed' causado por transforms de ancestros) */}
+      {isExpandedEditor && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.95)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            zIndex: 10000,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '24px',
+            color: '#F1F5F9',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          {/* Cabecera del editor expandido */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(20, 184, 166, 0.15)', padding: 8, borderRadius: 8 }}>
+                <Code size={22} className="text-teal-400" style={{ color: '#2DD4BF' }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#FFFFFF' }}>Entorno de Desarrollo de Decodificador</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Integración: {selectedIntegration?.name}</p>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <select
+                className="form-input"
+                style={{ width: 'auto', padding: '6px 12px', fontSize: 12, height: 'auto', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleLoadPreset(e.target.value as any);
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="" disabled style={{ background: '#0F172A' }}>Cargar plantilla...</option>
+                <option value="water_meter" style={{ background: '#0F172A' }}>Preset: Medidor de Agua</option>
+                <option value="smartbin" style={{ background: '#0F172A' }}>Preset: SmartBin</option>
+                <option value="tektelic_room" style={{ background: '#0F172A' }}>Preset: Tektelic Smart Room</option>
+                <option value="generic" style={{ background: '#0F172A' }}>Preset: Hexadecimal Genérico</option>
+              </select>
+
+              <button
+                className="btn-primary"
+                onClick={handleSaveDecoder}
+                disabled={savingDecoder}
+                style={{ padding: '8px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                {savingDecoder ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : saveSuccess ? (
+                  <Check size={14} />
+                ) : (
+                  <Save size={14} />
+                )}
+                <span>{saveSuccess ? 'Guardado con éxito' : 'Guardar Cambios'}</span>
+              </button>
+
+              <button
+                onClick={() => setIsExpandedEditor(false)}
+                className="btn-secondary"
+                style={{ 
+                  padding: '6px 12px', 
+                  height: '34px', 
+                  borderRadius: '6px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6,
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.2)'
+                }}
+              >
+                <Minimize2 size={16} />
+                <span>Minimizar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Contenido principal de pantalla completa */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px', flex: 1, minHeight: 0 }}>
+            {/* Editor de código expanded */}
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <textarea
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                style={{
+                  flex: 1,
+                  width: '100%',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  fontSize: '14px',
+                  background: '#1E293B',
+                  color: '#F8FAFC',
+                  padding: '24px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  lineHeight: '1.6',
+                  resize: 'none',
+                  outline: 'none',
+                  boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.2)'
+                }}
+              />
+               <p style={{ fontSize: '11.5px', marginTop: '8px', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Info size={12} style={{ color: '#2DD4BF' }} />
+                <span>Presiona el botón de guardar arriba para persistir el script de decodificación.</span>
+              </p>
+            </div>
+
+            {/* Simulador integrado en sidebar expanded */}
+            <div 
+              style={{ 
+                background: 'rgba(255,255,255,0.03)', 
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                overflowY: 'auto'
+              }}
+            >
+              <h4 style={{ fontSize: '15px', fontWeight: 600, margin: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', color: '#FFFFFF' }}>
+                Playground de Pruebas Integrado
+              </h4>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>Tipo de datos</label>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
+                  <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#fff' }}>
+                    <input type="radio" checked={payloadType === 'hex'} onChange={() => { setPayloadType('hex'); setTestPayload(testPort === 1 ? '0758004000' : testPort === 2 ? '541546' : '036700E204683C0500FF'); }} />
+                    Hexadecimal
+                  </label>
+                  <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#fff' }}>
+                    <input type="radio" checked={payloadType === 'base64'} onChange={() => { setPayloadType('base64'); setTestPayload(testPort === 1 ? 'B1gAQA==' : testPort === 2 ? 'VBUG' : 'A2cAAgRoPAUA/w=='); }} />
+                    Base64
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>Payload crudo</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={testPayload} 
+                  onChange={(e) => setTestPayload(e.target.value)} 
+                  style={{ 
+                    fontFamily: 'monospace', 
+                    background: 'rgba(0,0,0,0.2)', 
+                    color: '#fff', 
+                    border: '1px solid rgba(255,255,255,0.15)' 
+                  }} 
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>Puerto (fPort)</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  value={testPort} 
+                  onChange={(e) => setTestPort(Number(e.target.value))} 
+                  style={{ 
+                    background: 'rgba(0,0,0,0.2)', 
+                    color: '#fff', 
+                    border: '1px solid rgba(255,255,255,0.15)' 
+                  }}
+                />
+              </div>
+
+              <button 
+                className="btn-primary" 
+                onClick={handleTestDecode} 
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: '36px' }}
+              >
+                <Play size={14} />
+                <span>Testear Decodificador</span>
+              </button>
+
+              {(decodeResult || decodeError) && (
+                <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>
+                    <Terminal size={14} /> Consola de Resultado
+                  </label>
+                  {decodeError ? (
+                    <div style={{ padding: 12, borderRadius: 6, background: '#FCEBEB', border: '1px solid #F3AEAE', color: '#A32D2D', fontSize: 12, fontFamily: 'monospace', overflow: 'auto' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 'bold', marginBottom: 4 }}>
+                        <AlertCircle size={14} /> Error de Compilación/Ejecución
+                      </div>
+                      {decodeError}
+                    </div>
+                  ) : (
+                    <pre style={{ margin: 0, padding: 12, borderRadius: 6, background: '#0F172A', border: '1px solid rgba(255,255,255,0.1)', color: '#38BDF8', fontSize: 12, overflow: 'auto', fontFamily: 'monospace', flex: 1 }}>
+                      {JSON.stringify(decodeResult, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

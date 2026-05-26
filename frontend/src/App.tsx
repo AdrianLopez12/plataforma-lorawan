@@ -13,9 +13,9 @@ import IntegrationPage from './pages/IntegrationPage';
 import ClientsPage from './pages/ClientsPage';
 import UsersPage from './pages/UsersPage';
 
-function SuperAdminGuard({ children }: { children: React.ReactNode }) {
+function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (!user || user.role !== 'superadmin') {
+  if (!user || (user.role !== 'superadmin' && user.role !== 'admin')) {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
@@ -35,8 +35,8 @@ export default function App() {
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/integration" element={<IntegrationPage />} />
-            <Route path="/clients" element={<SuperAdminGuard><ClientsPage /></SuperAdminGuard>} />
-            <Route path="/users" element={<SuperAdminGuard><UsersPage /></SuperAdminGuard>} />
+            <Route path="/clients" element={<AdminGuard><ClientsPage /></AdminGuard>} />
+            <Route path="/users" element={<AdminGuard><UsersPage /></AdminGuard>} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

@@ -17,47 +17,40 @@ L.Icon.Default.mergeOptions({
 
 const waterIcon = L.divIcon({
   className: '',
-  html: `<div style="width:32px;height:32px;background:#185FA5;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:14px;">💧</div>`,
+  html: `<div style="width:32px;height:32px;background:#185FA5;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="16" height="16" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+  </div>`,
   iconSize: [32, 32], iconAnchor: [16, 16],
 });
 
 const binIconOk = L.divIcon({
   className: '',
-  html: `<div style="width:32px;height:32px;background:#854F0B;border-radius:8px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:14px;">🗑️</div>`,
+  html: `<div style="width:32px;height:32px;background:#854F0B;border-radius:8px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="16" height="16" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+  </div>`,
   iconSize: [32, 32], iconAnchor: [16, 16],
 });
 
 const binIconCritical = L.divIcon({
   className: '',
-  html: `<div style="width:32px;height:32px;background:#A32D2D;border-radius:8px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:14px;">⚠️</div>`,
+  html: `<div style="width:32px;height:32px;background:#A32D2D;border-radius:8px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="16" height="16" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+  </div>`,
   iconSize: [32, 32], iconAnchor: [16, 16],
 });
 
 const center: [number, number] = [-0.1950, -78.4900];
 
-const DEFAULT_DEVICE_MAPPINGS: Record<string, string> = {
-  'AA01020304050607': 'org1',
-  'AA02030405060708': 'org1',
-  'BB01020304050607': 'org1',
-  'BB02030405060708': 'org2',
-  'AA03040506070809': 'org2',
+
+const formatValue = (val: any, decimals: number): string => {
+  if (val === null || val === undefined) return '—';
+  const num = Number(val);
+  return isNaN(num) ? '—' : num.toFixed(decimals);
 };
 
 export default function MapPage() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<Device[]>(MOCK_DEVICES);
-  const [mappings, setMappings] = useState<Record<string, string>>({});
-
-  // Cargar mappings al iniciar
-  useEffect(() => {
-    let storedMappings = localStorage.getItem('device_organization_mappings');
-    if (!storedMappings) {
-      localStorage.setItem('device_organization_mappings', JSON.stringify(DEFAULT_DEVICE_MAPPINGS));
-      storedMappings = JSON.stringify(DEFAULT_DEVICE_MAPPINGS);
-    }
-    setMappings(JSON.parse(storedMappings));
-  }, []);
-
   useEffect(() => {
     getDevices()
       .then((data) => {
@@ -73,7 +66,7 @@ export default function MapPage() {
 
     // Filtro de multi-tenancy
     if (user?.role !== 'superadmin') {
-      const deviceOrg = mappings[d.devEUI] || 'org1';
+      const deviceOrg = d.organizationId || 'org1';
       if (deviceOrg !== user?.organizationId) {
         return false;
       }
@@ -109,16 +102,16 @@ export default function MapPage() {
                     <div style={{ color: '#666', fontSize: 11, marginBottom: 6 }}>{d.devEUI}</div>
                     {isWater ? (
                       <>
-                        <div>Caudal: <b>{(p as WaterMeterPayload)?.flow?.toFixed(2) ?? '—'} L/h</b></div>
-                        <div>Nivel: <b>{(p as WaterMeterPayload)?.level?.toFixed(0) ?? '—'} cm</b></div>
-                        <div>Temp: <b>{(p as WaterMeterPayload)?.temperature?.toFixed(1) ?? '—'}°C</b></div>
-                        {(p as WaterMeterPayload)?.alertLeak && <div style={{ color: '#A32D2D', marginTop: 4 }}>⚠ Alerta de fuga</div>}
+                        <div>Caudal: <b>{formatValue((p as WaterMeterPayload)?.flow, 2)} L/h</b></div>
+                        <div>Nivel: <b>{formatValue((p as WaterMeterPayload)?.level, 0)} cm</b></div>
+                        <div>Temp: <b>{formatValue((p as WaterMeterPayload)?.temperature, 1)}°C</b></div>
+                        {(p as WaterMeterPayload)?.alertLeak && <div style={{ color: '#A32D2D', marginTop: 4, fontWeight: 600 }}>Alerta de fuga</div>}
                       </>
                     ) : (
                       <>
-                        <div>Llenado: <b>{(p as SmartBinPayload)?.fillLevel ?? '—'}%</b></div>
-                        <div>Temp interior: <b>{(p as SmartBinPayload)?.temperature?.toFixed(1) ?? '—'}°C</b></div>
-                        {isCritical && <div style={{ color: '#A32D2D', marginTop: 4 }}>⚠ Requiere recolección</div>}
+                        <div>Llenado: <b>{formatValue((p as SmartBinPayload)?.fillLevel, 0)}%</b></div>
+                        <div>Temp interior: <b>{formatValue((p as SmartBinPayload)?.temperature, 1)}°C</b></div>
+                        {isCritical && <div style={{ color: '#A32D2D', marginTop: 4, fontWeight: 600 }}>Requiere recolección</div>}
                       </>
                     )}
                   </div>

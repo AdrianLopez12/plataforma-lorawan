@@ -15,6 +15,7 @@ export interface Organization {
   id: string;
   name: string;
   description?: string;
+  parentId?: string;
   createdAt?: string;
 }
 
@@ -30,6 +31,8 @@ export interface Device {
   createdAt: string;
   updatedAt: string;
   lastTelemetry?: TelemetryRecord;
+  staticParams?: Record<string, any>;
+  organizationId?: string;
 }
 
 export interface TelemetryRecord {
@@ -118,6 +121,7 @@ export interface DashboardWidget {
   metricUnit?: string;      // e.g. L/h, %, °C
   color?: 'teal' | 'blue' | 'amber' | 'purple' | 'red' | 'gray';
   width: 'third' | 'half' | 'two-thirds' | 'full';   // column width in the dashboard grid
+  height?: 'short' | 'medium' | 'tall' | 'extra-tall'; // panel height in the dashboard grid
   icon?: string;            // icon chosen for the panel
   tableColumns?: (string | TableColumnConfig)[];   // selected columns to show in a table widget
 }

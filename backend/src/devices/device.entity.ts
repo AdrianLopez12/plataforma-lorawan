@@ -28,11 +28,14 @@ export class Device {
   @Column({ nullable: true })
   applicationId: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: false })
   integrationId: string;
 
   @Column({ default: true })
   active: boolean;
+
+  @Column({ nullable: true })
+  organizationId: string;
 
   @CreateDateColumn()
   createdAt: Date;

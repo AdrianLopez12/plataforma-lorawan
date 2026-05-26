@@ -89,7 +89,7 @@ function decode(bytes, port) {
     }
   }
 
-  async create(data: { name: string; description?: string; preset?: string }): Promise<Integration> {
+  async create(data: { name: string; description?: string; preset?: string; organizationId?: string }): Promise<Integration> {
     const secret = 'sec_' + crypto.randomBytes(18).toString('hex');
     const decoderCode = this.getPresetTemplate(data.preset || 'generic');
 
@@ -98,6 +98,7 @@ function decode(bytes, port) {
       description: data.description,
       secret,
       decoderCode,
+      organizationId: data.organizationId || undefined,
     });
 
     return this.integrationRepo.save(integration);

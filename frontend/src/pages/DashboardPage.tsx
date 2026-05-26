@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { 
-  Droplets, Trash2, Plus, Settings, 
-  Trash, Cpu, Gauge, Map as MapIcon, Thermometer, 
+import {
+  Droplets, Trash2, Plus, Settings,
+  Trash, Cpu, Gauge, Map as MapIcon, Thermometer,
   Battery, Wind, X, LayoutDashboard, Activity, ArrowLeft,
-  Zap, Lightbulb, Database, Waves, LineChart as LineChartIcon, BarChart3
+  Zap, Lightbulb, Database, Waves, LineChart as LineChartIcon, BarChart3,
+  RefreshCw, Shield, Calendar, ChevronLeft, ChevronRight, MapPin
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, Legend } from 'recharts';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -27,17 +28,23 @@ L.Icon.Default.mergeOptions({
 const mapIcons: Record<string, L.DivIcon> = {
   water_meter: L.divIcon({
     className: '',
-    html: `<div style="width:28px;height:28px;background:#185FA5;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:12px;">💧</div>`,
+    html: `<div style="width:28px;height:28px;background:#185FA5;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+    </div>`,
     iconSize: [28, 28], iconAnchor: [14, 14],
   }),
   smartbin: L.divIcon({
     className: '',
-    html: `<div style="width:28px;height:28px;background:#854F0B;border-radius:6px;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:12px;">🗑️</div>`,
+    html: `<div style="width:28px;height:28px;background:#854F0B;border-radius:6px;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+    </div>`,
     iconSize: [28, 28], iconAnchor: [14, 14],
   }),
   general: L.divIcon({
     className: '',
-    html: `<div style="width:28px;height:28px;background:#1D9E75;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>`,
+    html: `<div style="width:28px;height:28px;background:#1D9E75;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+    </div>`,
     iconSize: [28, 28], iconAnchor: [14, 14],
   })
 };
@@ -111,18 +118,36 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   
   // Dashboard states
-  const [dashboards, setDashboards] = useState<CustomDashboard[]>(() => {
+  const [dashboards, setDashboards] = useState<CustomDashboard[]>([]);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Reloj dinámico de 10 segundos para actualizar las consultas de telemetría en tiempo real
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Carga robusta de dashboards sin siembra automática
+  useEffect(() => {
     const saved = localStorage.getItem('custom_dashboards');
+    let loadedDashboards: CustomDashboard[] = [];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) return parsed;
+        if (parsed && parsed.length > 0) {
+          loadedDashboards = parsed.map((d: any) => ({
+            ...d,
+            widgets: d.widgets || []
+          }));
+        }
       } catch (e) {
         console.error('Error parseando dashboards de localStorage', e);
       }
     }
-    return [DEFAULT_DASHBOARD];
-  });
+    setDashboards(loadedDashboards);
+  }, [user, clients]);
   
   // activeTab es 'list' por defecto para mostrar la consola central de grandes filas
   const [activeTab, setActiveTab] = useState<string>('list');
@@ -151,6 +176,7 @@ export default function DashboardPage() {
   const [newWidgetUnit, setNewWidgetUnit] = useState('L/h');
   const [newWidgetColor, setNewWidgetColor] = useState<'teal' | 'blue' | 'amber' | 'purple' | 'red' | 'gray'>('teal');
   const [newWidgetWidth, setNewWidgetWidth] = useState<'third' | 'half' | 'two-thirds' | 'full'>('half');
+  const [newWidgetHeight, setNewWidgetHeight] = useState<'short' | 'medium' | 'tall' | 'extra-tall'>('medium');
   const [newWidgetIcon, setNewWidgetIcon] = useState('Gauge');
   const [newWidgetSelectedDevices, setNewWidgetSelectedDevices] = useState<string[]>([]);
   const [newWidgetTableColumns, setNewWidgetTableColumns] = useState<TableColumnConfig[]>([]);
@@ -164,15 +190,170 @@ export default function DashboardPage() {
 
   // Cache para historiales de telemetría de widgets
   const [telemetryHistory, setTelemetryHistory] = useState<Record<string, TelemetryRecord[]>>({});
+
+  // Filtrado temporal dinámico
+  const [timeFilter, setTimeFilter] = useState<'2h' | '4h' | '24h' | 'custom'>('24h');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
+
+  const [showCalendarPopover, setShowCalendarPopover] = useState(false);
+  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date());
+  const [calendarHoverDate, setCalendarHoverDate] = useState<Date | null>(null);
+  const [calendarSelectStep, setCalendarSelectStep] = useState<'start' | 'end'>('start');
+
+  const MONTH_NAMES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  const formatDateLabel = (isoString: string): string => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    } catch (e) {
+      return isoString;
+    }
+  };
+
+  const isSameDay = (d1: Date, d2: Date) => {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+  };
+
+  const isWithinRange = (date: Date) => {
+    if (!customStart || !customEnd) return false;
+    const t = new Date(date).setHours(0,0,0,0);
+    const start = new Date(customStart).setHours(0,0,0,0);
+    const end = new Date(customEnd).setHours(0,0,0,0);
+    return t > start && t < end;
+  };
+
+  const isHoverRange = (date: Date) => {
+    if (calendarSelectStep !== 'end' || !customStart || !calendarHoverDate) return false;
+    const t = new Date(date).setHours(0,0,0,0);
+    const start = new Date(customStart).setHours(0,0,0,0);
+    const hover = new Date(calendarHoverDate).setHours(0,0,0,0);
+    if (hover >= start) {
+      return t > start && t <= hover;
+    } else {
+      return t >= hover && t < start;
+    }
+  };
+
+  const getCalendarCells = () => {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const startDay = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+
+    const cells: { date: Date; isCurrentMonth: boolean }[] = [];
+
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+    for (let i = startDay - 1; i >= 0; i--) {
+      cells.push({
+        date: new Date(year, month - 1, prevMonthTotalDays - i),
+        isCurrentMonth: false
+      });
+    }
+
+    for (let i = 1; i <= totalDays; i++) {
+      cells.push({
+        date: new Date(year, month, i),
+        isCurrentMonth: true
+      });
+    }
+
+    const totalCells = 42;
+    const remaining = totalCells - cells.length;
+    for (let i = 1; i <= remaining; i++) {
+      cells.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false
+      });
+    }
+
+    return cells;
+  };
+
+  const handleCalendarDayClick = (clickedDate: Date) => {
+    const formatDT = (d: Date, timeStr: string) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dayVal = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dayVal}T${timeStr}`;
+    };
+
+    if (calendarSelectStep === 'start') {
+      const startHourMin = customStart ? customStart.split('T')[1] || '00:00' : '00:00';
+      setCustomStart(formatDT(clickedDate, startHourMin));
+      const endHourMin = customEnd ? customEnd.split('T')[1] || '23:59' : '23:59';
+      setCustomEnd(formatDT(clickedDate, endHourMin));
+      setCalendarSelectStep('end');
+    } else {
+      const startObj = new Date(customStart);
+      const endHourMin = customEnd ? customEnd.split('T')[1] || '23:59' : '23:59';
+      
+      if (clickedDate.getTime() < startObj.getTime()) {
+        const startHourMin = customStart ? customStart.split('T')[1] || '00:00' : '00:00';
+        setCustomStart(formatDT(clickedDate, startHourMin));
+        setCustomEnd(formatDT(startObj, endHourMin));
+      } else {
+        setCustomEnd(formatDT(clickedDate, endHourMin));
+      }
+      setCalendarSelectStep('start');
+    }
+  };
+
+
+  const getFilteredTelemetry = (history: TelemetryRecord[]): TelemetryRecord[] => {
+    if (!history || history.length === 0) return [];
+    const now = currentTime;
+    let minTime = 0;
+    let maxTime = Infinity;
+
+    if (timeFilter === '2h') {
+      minTime = now - 2 * 3600000;
+    } else if (timeFilter === '4h') {
+      minTime = now - 4 * 3600000;
+    } else if (timeFilter === '24h') {
+      minTime = now - 24 * 3600000;
+    } else if (timeFilter === 'custom') {
+      if (customStart) minTime = new Date(customStart).getTime();
+      if (customEnd) maxTime = new Date(customEnd).getTime();
+    }
+
+    return history.filter(record => {
+      const t = new Date(record.receivedAt).getTime();
+      return t >= minTime && t <= maxTime;
+    });
+  };
   
-  // Estados para grupos de dispositivos y creación inline
+  // Grupos de dispositivos
   const [deviceGroups, setDeviceGroups] = useState<DeviceGroup[]>([]);
   const [newWidgetDeviceGroupId, setNewWidgetDeviceGroupId] = useState('');
-  const [newWidgetSourceType, setNewWidgetSourceType] = useState<'single' | 'group'>('single');
-  const [showNewGroupForm, setShowNewGroupForm] = useState(false);
-  const [inlineGroupName, setInlineGroupName] = useState('');
-  const [inlineGroupType, setInlineGroupType] = useState<'water_meter' | 'smartbin'>('water_meter');
-  const [inlineGroupSelectedDevices, setInlineGroupSelectedDevices] = useState<string[]>([]);
+  const [newWidgetSourceType, setNewWidgetSourceType] = useState<'single' | 'multi' | 'group'>('single');
+
+  // Vista de la pantalla de lista: 'dashboards' | 'groups'
+  const [listView, setListView] = useState<'dashboards' | 'groups'>('dashboards');
+
+  // CRUD de grupos desde la pantalla de Dashboard
+  const [isGroupDrawerOpen, setIsGroupDrawerOpen] = useState(false);
+  const [groupDrawerMode, setGroupDrawerMode] = useState<'add' | 'edit' | null>(null);
+  const [editingGroup, setEditingGroup] = useState<DeviceGroup | null>(null);
+  const [groupName, setGroupName] = useState('');
+  const [groupType, setGroupType] = useState<'water_meter' | 'smartbin'>('water_meter');
+  const [groupSelectedDevices, setGroupSelectedDevices] = useState<string[]>([]);
+  const [groupOrgId, setGroupOrgId] = useState('plasticos_rival');
+  const [groupDeviceSearch, setGroupDeviceSearch] = useState('');
 
   // Estado para la notificación flotante de alertas en tiempo real
   const [activeToast, setActiveToast] = useState<{ id: string, title: string, message: string, severity: 'critical' | 'warning' | 'info' } | null>(null);
@@ -252,10 +433,10 @@ export default function DashboardPage() {
         setActiveToast({
           id: triggeredAlert.id,
           title: triggeredAlert.severity === 'critical' 
-            ? '🚨 Alarma Crítica' 
+            ? 'Alarma Crítica' 
             : triggeredAlert.severity === 'warning' 
-              ? '⚠️ Advertencia IoT' 
-              : 'ℹ️ Evento del Dispositivo',
+              ? 'Advertencia IoT' 
+              : 'Evento del Dispositivo',
           message: triggeredAlert.message,
           severity: triggeredAlert.severity
         });
@@ -269,7 +450,7 @@ export default function DashboardPage() {
       try {
         setDeviceGroups(JSON.parse(saved));
       } catch (e) {
-        console.error('Error cargando grupos en DashboardPage', e);
+        setDeviceGroups([]);
       }
     } else {
       setDeviceGroups([]);
@@ -279,18 +460,67 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDeviceGroups();
   }, []);
-  
-  const [newDashOrgId, setNewDashOrgId] = useState('org1');
-  const [editDashOrgId, setEditDashOrgId] = useState('org1');
-  const [deviceMappings, setDeviceMappings] = useState<Record<string, string>>({});
 
-  // Cargar mappings al iniciar
-  useEffect(() => {
-    const stored = localStorage.getItem('device_organization_mappings');
-    if (stored) {
-      setDeviceMappings(JSON.parse(stored));
+  const saveGroups = (newGroups: DeviceGroup[]) => {
+    setDeviceGroups(newGroups);
+    localStorage.setItem('device_groups', JSON.stringify(newGroups));
+  };
+
+  const handleOpenAddGroup = () => {
+    const targetOrg = activeDashboard?.organizationId || user?.organizationId || 'plasticos_rival';
+    setGroupName('');
+    setGroupType('water_meter');
+    setGroupSelectedDevices([]);
+    setGroupOrgId(targetOrg);
+    setGroupDeviceSearch('');
+    setEditingGroup(null);
+    setGroupDrawerMode('add');
+    setIsGroupDrawerOpen(true);
+  };
+
+  const handleOpenEditGroup = (group: DeviceGroup) => {
+    setEditingGroup(group);
+    setGroupName(group.name);
+    setGroupType(group.deviceType);
+    setGroupSelectedDevices(group.deviceEUIs);
+    setGroupOrgId(group.organizationId || 'plasticos_rival');
+    setGroupDeviceSearch('');
+    setGroupDrawerMode('edit');
+    setIsGroupDrawerOpen(true);
+  };
+
+  const handleSaveGroup = () => {
+    if (!groupName.trim() || groupSelectedDevices.length === 0) return;
+    if (groupDrawerMode === 'add') {
+      const newGroup: DeviceGroup = {
+        id: 'grp-' + Math.random().toString(36).substr(2, 9),
+        name: groupName.trim(),
+        deviceType: groupType,
+        deviceEUIs: groupSelectedDevices,
+        organizationId: groupOrgId,
+        createdAt: new Date().toISOString()
+      };
+      saveGroups([...deviceGroups, newGroup]);
+    } else if (groupDrawerMode === 'edit' && editingGroup) {
+      saveGroups(deviceGroups.map(g => g.id === editingGroup.id
+        ? { ...g, name: groupName.trim(), deviceType: groupType, deviceEUIs: groupSelectedDevices }
+        : g
+      ));
     }
-  }, []);
+    setIsGroupDrawerOpen(false);
+    setGroupDrawerMode(null);
+    setEditingGroup(null);
+  };
+
+  const handleDeleteGroup = (id: string) => {
+    if (window.confirm('¿Eliminar este grupo de dispositivos?')) {
+      saveGroups(deviceGroups.filter(g => g.id !== id));
+    }
+  };
+
+  
+  const [newDashOrgId, setNewDashOrgId] = useState('plasticos_rival');
+  const [editDashOrgId, setEditDashOrgId] = useState('plasticos_rival');
 
   // Inicializar organización por defecto para nueva dashboard
   useEffect(() => {
@@ -299,37 +529,51 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  // Siembra dinámica de un dashboard por defecto para el tenant si no tiene ninguno
-  useEffect(() => {
-    if (user && user.role !== 'superadmin') {
-      const hasTenantDash = dashboards.some(d => d.organizationId === user.organizationId);
-      if (!hasTenantDash) {
-        const tenantDefaultDash: CustomDashboard = {
-          id: `dash-default-${user.organizationId}`,
-          name: `Dashboard de ${user.organizationId === 'org1' ? 'Empresa Demo S.A.' : 'Servicios Públicos Quito'}`,
-          icon: 'LayoutDashboard',
-          isPreset: false,
-          organizationId: user.organizationId,
-          widgets: []
-        };
-        const updated = [...dashboards, tenantDefaultDash];
-        setDashboards(updated);
-        localStorage.setItem('custom_dashboards', JSON.stringify(updated));
-      }
-    }
-  }, [user, dashboards]);
+  // Siembra dinámica removida (integrada en la carga robusta del useEffect superior)
 
   const filteredDashboards = dashboards.filter((dash) => {
     if (user?.role === 'superadmin') return true;
     return dash.organizationId === user?.organizationId;
   });
 
+  // activeDashboard must be computed BEFORE filteredDevices so device filtering
+  // can be scoped to the dashboard's org (not just the logged-in user's org).
+  const activeDashboard = filteredDashboards.find(d => d.id === activeTab);
+
   const filteredDevices = devices.filter(d => {
-    if (user?.role === 'superadmin') return true;
-    const devOrg = deviceMappings[d.devEUI] || 'org1';
-    return devOrg === user?.organizationId;
+    if (user?.role === 'superadmin') return true; // El Super Admin ve TODOS los dispositivos globalmente en los paneles
+
+    // Determine the org that should gate device visibility.
+    // Priority: dashboard's org → user's org → no filter (superadmin on list view).
+    // Dashboards without an explicit organizationId implicitly belong to 'org1'.
+    let targetOrg: string | undefined;
+    if (activeTab !== 'list') {
+      targetOrg = activeDashboard?.organizationId || 'plasticos_rival';
+    } else {
+      targetOrg = user?.organizationId || 'plasticos_rival';
+    }
+    if (!targetOrg) return true;
+    const devOrg = d.organizationId || 'plasticos_rival';
+    return devOrg === targetOrg;
   });
-  
+
+  // Dispositivos disponibles para el grupo (filtrados por org y tipo)
+  const groupAvailableDevices = filteredDevices.filter(d => d.deviceType === groupType);
+  const groupFilteredDevices = groupAvailableDevices.filter(d => {
+    if (!groupDeviceSearch.trim()) return true;
+    const q = groupDeviceSearch.toLowerCase();
+    return (d.name || '').toLowerCase().includes(q) || d.devEUI.toLowerCase().includes(q);
+  });
+
+  // Grupos visibles según org del usuario o dashboard activo
+  const filteredGroups = deviceGroups.filter(g => {
+    const targetOrg = activeTab !== 'list'
+      ? (activeDashboard?.organizationId || 'plasticos_rival')
+      : (user?.role !== 'superadmin' ? user?.organizationId : undefined);
+    if (!targetOrg) return true;
+    return g.organizationId === targetOrg;
+  });
+
   // Carga de dispositivos reales
   useEffect(() => {
     getDevices()
@@ -343,7 +587,7 @@ export default function DashboardPage() {
       });
   }, []);
 
-  // Cargar telemetrías de line charts cuando cambia el tab o los widgets
+  // Cargar telemetrías cuando cambia el tab, los widgets o los dispositivos
   useEffect(() => {
     if (activeTab === 'list') return;
     const activeDash = dashboards.find(d => d.id === activeTab);
@@ -351,67 +595,37 @@ export default function DashboardPage() {
 
     loadDeviceGroups();
 
-    activeDash.widgets.forEach(widget => {
-      if (widget.type === 'line') {
-        // Caso 1: Dispositivo Único
-        if (widget.deviceEUI && !telemetryHistory[widget.deviceEUI]) {
-          getDeviceTelemetry(widget.deviceEUI, 24)
-            .then(data => {
-              if (data && data.length > 0) {
-                setTelemetryHistory(prev => ({
-                  ...prev,
-                  [widget.deviceEUI!]: data
-                }));
-              } else {
-                setTelemetryHistory(prev => ({
-                  ...prev,
-                  [widget.deviceEUI!]: generateTelemetryHistory(widget.deviceEUI!, 24)
-                }));
-              }
-            })
-            .catch(() => {
-              setTelemetryHistory(prev => ({
-                ...prev,
-                [widget.deviceEUI!]: generateTelemetryHistory(widget.deviceEUI!, 24)
-              }));
-            });
-        }
-
-        // Caso 2: Grupo de Dispositivos (precargar telemetrías de cada dispositivo en el grupo)
-        if (widget.deviceGroupId) {
-          const saved = localStorage.getItem('device_groups');
-          const allGroups: DeviceGroup[] = saved ? JSON.parse(saved) : [];
-          const group = allGroups.find(g => g.id === widget.deviceGroupId);
-          if (group) {
-            group.deviceEUIs.forEach(eui => {
-              if (!telemetryHistory[eui]) {
-                getDeviceTelemetry(eui, 24)
-                  .then(data => {
-                    if (data && data.length > 0) {
-                      setTelemetryHistory(prev => ({
-                        ...prev,
-                        [eui]: data
-                      }));
-                    } else {
-                      setTelemetryHistory(prev => ({
-                        ...prev,
-                        [eui]: generateTelemetryHistory(eui, 24)
-                      }));
-                    }
-                  })
-                  .catch(() => {
-                    setTelemetryHistory(prev => ({
-                      ...prev,
-                      [eui]: generateTelemetryHistory(eui, 24)
-                    }));
-                  });
-              }
-            });
-          }
-        }
+    // Deduplicate by devEUI+fCnt (same frame received by multiple gateways)
+    // keeping the record with the best RSSI per uplink frame
+    const deduplicateTelemetry = (records: TelemetryRecord[]): TelemetryRecord[] => {
+      const best = new Map<string, TelemetryRecord>();
+      for (const r of records) {
+        const key = `${r.devEUI}-${r.fCnt}`;
+        const existing = best.get(key);
+        if (!existing || r.rssi > existing.rssi) best.set(key, r);
       }
-    });
-  }, [activeTab, dashboards]);
+      return Array.from(best.values()).sort(
+        (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+    };
+
+    const loadEUI = (eui: string, limit = 200) => {
+      if (telemetryHistory[eui]) return;
+      getDeviceTelemetry(eui, limit)
+        .then(data => {
+          setTelemetryHistory(prev => ({
+            ...prev,
+            [eui]: data && data.length > 0 ? deduplicateTelemetry(data) : generateTelemetryHistory(eui, limit)
+          }));
+        })
+        .catch(() => {
+          setTelemetryHistory(prev => ({ ...prev, [eui]: generateTelemetryHistory(eui, limit) }));
+        });
+    };
+
+    // Cargar automáticamente el historial de todos los dispositivos visibles en este dashboard
+    filteredDevices.forEach(d => loadEUI(d.devEUI));
+  }, [activeTab, dashboards, devices]);
 
   const saveDashboards = (newList: CustomDashboard[]) => {
     setDashboards(newList);
@@ -425,7 +639,11 @@ export default function DashboardPage() {
     const defaultWidgets: DashboardWidget[] = [];
 
     if (newDashPreset === 'water_meters') {
-      const firstMeter = devices.find(d => d.deviceType === 'water_meter') || devices[0];
+      const presetOrg = user?.role === 'superadmin' ? newDashOrgId : user?.organizationId;
+      const presetDevices = presetOrg
+        ? devices.filter(d => (d.organizationId || 'org1') === presetOrg)
+        : devices;
+      const firstMeter = presetDevices.find(d => d.deviceType === 'water_meter') || presetDevices[0];
       if (firstMeter) {
         defaultWidgets.push(
           {
@@ -468,7 +686,11 @@ export default function DashboardPage() {
         );
       }
     } else if (newDashPreset === 'smartbins') {
-      const firstBin = devices.find(d => d.deviceType === 'smartbin') || devices[0];
+      const presetOrg = user?.role === 'superadmin' ? newDashOrgId : user?.organizationId;
+      const presetDevices = presetOrg
+        ? devices.filter(d => (d.organizationId || 'org1') === presetOrg)
+        : devices;
+      const firstBin = presetDevices.find(d => d.deviceType === 'smartbin') || presetDevices[0];
       if (firstBin) {
         defaultWidgets.push(
           {
@@ -566,13 +788,11 @@ export default function DashboardPage() {
     setNewWidgetDevice('');
     setNewWidgetDeviceGroupId('');
     setNewWidgetSourceType('single');
-    setShowNewGroupForm(false);
-    setInlineGroupName('');
-    setInlineGroupSelectedDevices([]);
     setNewWidgetMetric('flow');
     setNewWidgetUnit('L/h');
     setNewWidgetColor('teal');
     setNewWidgetWidth('half');
+    setNewWidgetHeight('medium');
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
     setNewWidgetTableColumns(resolveTableColumns(undefined, undefined));
@@ -585,7 +805,13 @@ export default function DashboardPage() {
     setNewWidgetTitle(widget.title);
     setNewWidgetType(widget.type);
     
-    if (widget.deviceGroupId) {
+    // Detect source type for the widget
+    if (widget.type === 'table' && widget.selectedDevices && widget.selectedDevices.length > 0) {
+      setNewWidgetSourceType('multi');
+      setNewWidgetSelectedDevices(widget.selectedDevices);
+      setNewWidgetDevice('');
+      setNewWidgetDeviceGroupId('');
+    } else if (widget.deviceGroupId) {
       setNewWidgetDeviceGroupId(widget.deviceGroupId);
       setNewWidgetSourceType('group');
       setNewWidgetDevice('');
@@ -594,14 +820,12 @@ export default function DashboardPage() {
       setNewWidgetSourceType('single');
       setNewWidgetDevice(widget.deviceEUI || '');
     }
-    setShowNewGroupForm(false);
-    setInlineGroupName('');
-    setInlineGroupSelectedDevices([]);
 
     setNewWidgetMetric(widget.metricKey || 'flow');
     setNewWidgetUnit(widget.metricUnit || '');
     setNewWidgetColor(widget.color || 'teal');
     setNewWidgetWidth(widget.width || 'half');
+    setNewWidgetHeight(widget.height || 'medium');
     setNewWidgetIcon(widget.icon || 'Gauge');
     setNewWidgetSelectedDevices(widget.selectedDevices || []);
     
@@ -615,17 +839,20 @@ export default function DashboardPage() {
 
     if (drawerMode === 'add') {
       const newId = 'w-' + Math.random().toString(36).substr(2, 9);
+      const isBarOrMap = newWidgetType === 'bar' || newWidgetType === 'map';
+      const isTableMulti = newWidgetType === 'table' && newWidgetSourceType === 'multi';
       const newWidget: DashboardWidget = {
         id: newId,
         type: newWidgetType,
         title: newWidgetTitle,
-        deviceEUI: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'single') ? newWidgetDevice : undefined,
-        deviceGroupId: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'group') ? newWidgetDeviceGroupId : undefined,
-        selectedDevices: (newWidgetType === 'map' || newWidgetType === 'bar') ? newWidgetSelectedDevices : undefined,
+        deviceEUI: !isBarOrMap && newWidgetSourceType === 'single' ? newWidgetDevice : undefined,
+        deviceGroupId: !isBarOrMap && newWidgetSourceType === 'group' ? newWidgetDeviceGroupId : undefined,
+        selectedDevices: (isBarOrMap || isTableMulti) ? newWidgetSelectedDevices : undefined,
         metricKey: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetMetric : undefined,
         metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
         color: newWidgetColor,
         width: newWidgetWidth,
+        height: newWidgetHeight,
         icon: newWidgetIcon,
         tableColumns: newWidgetType === 'table' ? newWidgetTableColumns : undefined
       };
@@ -642,6 +869,8 @@ export default function DashboardPage() {
 
       saveDashboards(updated);
     } else if (drawerMode === 'edit' && editingWidget) {
+      const isBarOrMap2 = newWidgetType === 'bar' || newWidgetType === 'map';
+      const isTableMulti2 = newWidgetType === 'table' && newWidgetSourceType === 'multi';
       const updated = dashboards.map(dash => {
         if (dash.id === activeTab) {
           return {
@@ -650,13 +879,14 @@ export default function DashboardPage() {
               ...w,
               type: newWidgetType,
               title: newWidgetTitle,
-              deviceEUI: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'single') ? newWidgetDevice : undefined,
-              deviceGroupId: (newWidgetType !== 'bar' && newWidgetType !== 'map' && newWidgetSourceType === 'group') ? newWidgetDeviceGroupId : undefined,
-              selectedDevices: (newWidgetType === 'map' || newWidgetType === 'bar') ? newWidgetSelectedDevices : undefined,
+              deviceEUI: !isBarOrMap2 && newWidgetSourceType === 'single' ? newWidgetDevice : undefined,
+              deviceGroupId: !isBarOrMap2 && newWidgetSourceType === 'group' ? newWidgetDeviceGroupId : undefined,
+              selectedDevices: (isBarOrMap2 || isTableMulti2) ? newWidgetSelectedDevices : undefined,
               metricKey: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetMetric : undefined,
               metricUnit: newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar' ? newWidgetUnit : undefined,
               color: newWidgetColor,
               width: newWidgetWidth,
+              height: newWidgetHeight,
               icon: newWidgetIcon,
               tableColumns: newWidgetType === 'table' ? newWidgetTableColumns : undefined
             } : w)
@@ -678,6 +908,7 @@ export default function DashboardPage() {
     setNewWidgetUnit('L/h');
     setNewWidgetColor('teal');
     setNewWidgetWidth('half');
+    setNewWidgetHeight('medium');
     setNewWidgetIcon('Gauge');
     setNewWidgetSelectedDevices([]);
     setNewWidgetTableColumns([]);
@@ -716,6 +947,19 @@ export default function DashboardPage() {
     saveDashboards(updated);
   };
 
+  const handleResizeWidgetHeight = (widgetId: string, newHeight: 'short' | 'medium' | 'tall' | 'extra-tall') => {
+    const updated = dashboards.map(dash => {
+      if (dash.id === activeTab) {
+        return {
+          ...dash,
+          widgets: dash.widgets.map(w => w.id === widgetId ? { ...w, height: newHeight } : w)
+        };
+      }
+      return dash;
+    });
+    saveDashboards(updated);
+  };
+
   const renderDashboardIcon = (iconName: string, size = 18) => {
     const iconMap: Record<string, any> = {
       LayoutDashboard: LayoutDashboard,
@@ -739,8 +983,6 @@ export default function DashboardPage() {
     return <Component size={size} />;
   };
 
-  const activeDashboard = filteredDashboards.find(d => d.id === activeTab);
-
   // Trigger para cargar formulario de edición
   useEffect(() => {
     if (editingDashboard) {
@@ -752,13 +994,21 @@ export default function DashboardPage() {
 
   // Renderizador de cada tipo de Widget
   const renderWidgetContent = (widget: DashboardWidget) => {
-    const targetDevice = devices.find(d => d.devEUI === widget.deviceEUI);
-    const telemetry = targetDevice?.lastTelemetry;
-    const payload = telemetry?.decodedPayload as any;
+    const targetDevice = filteredDevices.find(d => d.devEUI === widget.deviceEUI);
+    const getContentHeight = (w: DashboardWidget) => {
+      const h = w.height || 'medium';
+      if (h === 'short') return 120;
+      if (h === 'tall') return 340;
+      if (h === 'extra-tall') return 460;
+      return 220; // 'medium'
+    };
     
     switch (widget.type) {
       case 'kpi': {
-        const val = payload && widget.metricKey ? payload[widget.metricKey] : null;
+        const deviceHistory = telemetryHistory[widget.deviceEUI || ''] || [];
+        const filteredHistory = getFilteredTelemetry(deviceHistory);
+        const latestRecord = filteredHistory[0];
+        const val = latestRecord && latestRecord.decodedPayload && widget.metricKey ? (latestRecord.decodedPayload as any)[widget.metricKey] : null;
         const colorClass = widget.color || 'teal';
         return (
           <div className="widget-kpi-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
@@ -771,6 +1021,9 @@ export default function DashboardPage() {
               </div>
               <div style={{ fontSize: '12px', color: 'var(--color-muted)', marginTop: 4 }}>
                 {targetDevice ? targetDevice.name : 'Ningún dispositivo'}
+                {filteredHistory.length === 0 && (
+                  <span style={{ color: 'var(--color-red, #dc3545)', fontSize: '10px', marginLeft: '6px', fontWeight: 550 }}>(Sin telemetría en período)</span>
+                )}
               </div>
             </div>
             <div className={`stat-card-icon ${colorClass}`} style={{ borderRadius: '50%', padding: '12px', background: `var(--color-bg)` }}>
@@ -786,12 +1039,21 @@ export default function DashboardPage() {
         // CASO A: Comparativa de Grupo de Dispositivos
         if (widget.deviceGroupId) {
           const activeGroup = deviceGroups.find(g => g.id === widget.deviceGroupId) || 
-                            JSON.parse(localStorage.getItem('device_groups') || '[]').find((g: any) => g.id === widget.deviceGroupId);
-          
+                              JSON.parse(localStorage.getItem('device_groups') || '[]').find((g: any) => g.id === widget.deviceGroupId);
+            
           if (!activeGroup) {
             return (
               <div className="text-muted" style={{ padding: '40px 0', fontSize: 12, textAlign: 'center' }}>
                 Grupo de dispositivos no encontrado.
+              </div>
+            );
+          }
+
+          // Verify group belongs to dashboard organization
+          if (activeDashboard?.organizationId && activeGroup.organizationId !== activeDashboard.organizationId) {
+            return (
+              <div className="text-muted" style={{ padding: '40px 0', fontSize: 12, textAlign: 'center' }}>
+                Grupo no autorizado para este dashboard.
               </div>
             );
           }
@@ -810,21 +1072,35 @@ export default function DashboardPage() {
 
           // Alinear telemetrías por fecha
           const masterEUI = activeGroup.deviceEUIs[0];
-          const masterHistory = [...(telemetryHistory[masterEUI] || [])].reverse(); // del más antiguo al más nuevo
+          const masterFiltered = getFilteredTelemetry(telemetryHistory[masterEUI] || []);
+          
+          if (masterFiltered.length === 0) {
+            return (
+              <div className="text-muted" style={{ padding: '80px 0', fontSize: 12, textAlign: 'center', color: 'var(--color-muted)' }}>
+                No hay datos en el período seleccionado.
+              </div>
+            );
+          }
+
+          const masterHistory = [...masterFiltered].reverse(); // del más antiguo al más nuevo
 
           const mergedData = masterHistory.map((h, index) => {
-            const timeStr = format(new Date(h.receivedAt), 'HH:mm');
+            const dateObj = new Date(h.receivedAt);
+            const formatStr = timeFilter === 'custom' || timeFilter === '24h' ? 'dd/MM HH:mm' : 'HH:mm';
+            const timeStr = format(dateObj, formatStr);
             const dataPoint: any = { time: timeStr };
             
             activeGroup.deviceEUIs.forEach((eui: string) => {
               const dev = devices.find(d => d.devEUI === eui);
               const name = dev ? dev.name : `Sensor ${eui.substring(0, 6)}`;
               
-              const devHist = telemetryHistory[eui] || [];
+              const devHist = getFilteredTelemetry(telemetryHistory[eui] || []);
               const revIdx = devHist.length - 1 - index;
               const devRecord = devHist[revIdx] || devHist[index];
               
-              const val = devRecord ? Number((devRecord.decodedPayload as any)[widget.metricKey || 'flow']?.toFixed(1) ?? 0) : null;
+              const rawVal = devRecord && devRecord.decodedPayload ? (devRecord.decodedPayload as any)[widget.metricKey || 'flow'] : null;
+              const parsedNum = rawVal !== null && rawVal !== undefined ? Number(rawVal) : NaN;
+              const val = devRecord ? (!isNaN(parsedNum) ? Number(parsedNum.toFixed(1)) : 0) : null;
               dataPoint[name] = val;
             });
             
@@ -834,12 +1110,12 @@ export default function DashboardPage() {
           const PRESET_COLORS = ['#1D9E75', '#185FA5', '#BA7517', '#8A3FFC', '#A32D2D', '#EC4899', '#4B5563'];
 
           return (
-            <div style={{ width: '100%', height: 210, marginTop: 12 }}>
+            <div style={{ width: '100%', height: getContentHeight(widget), marginTop: 12 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={mergedData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={3} />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={Math.ceil(mergedData.length / 8)} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: string) => [`${v} ${widget.metricUnit}`, name]} />
+                  <Tooltip formatter={(v: any, name?: any) => [`${v} ${widget.metricUnit}`, name || '']} />
                   <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 10, paddingTop: 10 }} />
                   {activeGroup.deviceEUIs.map((eui: string, idx: number) => {
                     const dev = devices.find(d => d.devEUI === eui);
@@ -865,10 +1141,26 @@ export default function DashboardPage() {
 
         // CASO B: Dispositivo Único
         const history = telemetryHistory[widget.deviceEUI || ''] || [];
-        const formatted = [...history].reverse().map(h => ({
-          time: format(new Date(h.receivedAt), 'HH:mm'),
-          val: Number((h.decodedPayload as any)[widget.metricKey || 'flow']?.toFixed(1) ?? 0)
-        }));
+        const filteredHistory = getFilteredTelemetry(history);
+        
+        if (filteredHistory.length === 0) {
+          return (
+            <div className="text-muted" style={{ padding: '80px 0', fontSize: 12, textAlign: 'center', color: 'var(--color-muted)' }}>
+              No hay datos en el período seleccionado.
+            </div>
+          );
+        }
+
+        const formatted = [...filteredHistory].reverse().map(h => {
+          const raw = h.decodedPayload ? (h.decodedPayload as any)[widget.metricKey || 'flow'] : null;
+          const num = raw !== null && raw !== undefined ? Number(raw) : NaN;
+          const dateObj = new Date(h.receivedAt);
+          const formatStr = timeFilter === 'custom' || timeFilter === '24h' ? 'dd/MM HH:mm' : 'HH:mm';
+          return {
+            time: format(dateObj, formatStr),
+            val: !isNaN(num) ? Number(num.toFixed(1)) : 0
+          };
+        });
 
         const colorHex = widget.color === 'blue' ? '#185FA5' : 
                          widget.color === 'amber' ? '#BA7517' : 
@@ -876,7 +1168,7 @@ export default function DashboardPage() {
                          widget.color === 'purple' ? '#8A3FFC' : '#1D9E75';
 
         return (
-          <div style={{ width: '100%', height: 200, marginTop: 12 }}>
+          <div style={{ width: '100%', height: getContentHeight(widget), marginTop: 12 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={formatted} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                 <defs>
@@ -885,7 +1177,7 @@ export default function DashboardPage() {
                     <stop offset="95%" stopColor={colorHex} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={3} />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={Math.ceil(formatted.length / 8)} />
                 <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: any) => [`${v} ${widget.metricUnit}`, widget.title]} />
                 <Area type="monotone" dataKey="val" stroke={colorHex} fill={`url(#grad-${widget.id})`} strokeWidth={2} dot={false} />
@@ -899,10 +1191,15 @@ export default function DashboardPage() {
         const subset = widget.selectedDevices && widget.selectedDevices.length > 0
           ? filteredDevices.filter(d => widget.selectedDevices?.includes(d.devEUI))
           : filteredDevices.filter(d => d.deviceType === typeFilter);
-        const data = subset.map(d => ({
-          name: d.name.replace('Medidor ', '').replace('SmartBin ', ''),
-          val: (d.lastTelemetry?.decodedPayload as any)?.[widget.metricKey || ''] ?? 0
-        }));
+        const data = subset.map(d => {
+          const devHistory = telemetryHistory[d.devEUI] || [];
+          const filteredHistory = getFilteredTelemetry(devHistory);
+          const latest = filteredHistory[0];
+          return {
+            name: d.name.replace('Medidor ', '').replace('SmartBin ', ''),
+            val: latest && latest.decodedPayload && widget.metricKey ? (latest.decodedPayload as any)[widget.metricKey] ?? 0 : 0
+          };
+        });
 
         const colorHex = widget.color === 'blue' ? '#185FA5' : 
                          widget.color === 'teal' ? '#1D9E75' : 
@@ -910,7 +1207,7 @@ export default function DashboardPage() {
                          widget.color === 'purple' ? '#8A3FFC' : '#BA7517';
 
         return (
-          <div style={{ width: '100%', height: 200, marginTop: 12 }}>
+          <div style={{ width: '100%', height: getContentHeight(widget), marginTop: 12 }}>
             {data.length === 0 ? (
               <div className="text-muted" style={{ textAlign: 'center', padding: '40px 0', fontSize: 12 }}>
                 No hay dispositivos seleccionados o disponibles.
@@ -938,7 +1235,7 @@ export default function DashboardPage() {
           : [-0.1950, -78.4900];
 
         return (
-          <div style={{ height: 220, width: '100%', borderRadius: 8, overflow: 'hidden', marginTop: 12, border: '0.5px solid var(--color-border)' }}>
+          <div style={{ height: getContentHeight(widget), width: '100%', borderRadius: 8, overflow: 'hidden', marginTop: 12, border: '0.5px solid var(--color-border)' }}>
             <MapContainer center={mapCenter} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false}>
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
@@ -946,15 +1243,25 @@ export default function DashboardPage() {
               />
               {devicesWithCoords.map(d => {
                 const icon = mapIcons[d.deviceType] || mapIcons.general;
-                const p = d.lastTelemetry?.decodedPayload as any;
+                const devHistory = telemetryHistory[d.devEUI] || [];
+                const filteredHistory = getFilteredTelemetry(devHistory);
+                const latest = filteredHistory[0];
+                const p = latest?.decodedPayload as any;
                 return (
                   <Marker key={d.id} position={[d.lat!, d.lng!]} icon={icon}>
                     <Popup>
                       <div style={{ fontSize: 11 }}>
                         <strong>{d.name}</strong>
                         <div style={{ fontSize: 10, color: 'var(--color-muted)' }}>DevEUI: {d.devEUI}</div>
-                        {p?.flow !== undefined && <div>Caudal: {p.flow.toFixed(1)} L/h</div>}
-                        {p?.fillLevel !== undefined && <div>Llenado: {p.fillLevel}%</div>}
+                        {!latest ? (
+                          <div style={{ fontSize: 10, color: 'var(--color-red, #dc3545)', marginTop: 4, fontWeight: 550 }}>Sin telemetría en período</div>
+                        ) : (
+                          <>
+                            {p?.flow !== undefined && !isNaN(Number(p.flow)) && <div>Caudal: {Number(p.flow).toFixed(1)} L/h</div>}
+                            {p?.fillLevel !== undefined && <div>Llenado: {p.fillLevel}%</div>}
+                            <div style={{ fontSize: 9, color: 'var(--color-hint)', marginTop: 4 }}>Recibido: {format(new Date(latest.receivedAt), 'dd/MM HH:mm:ss')}</div>
+                          </>
+                        )}
                       </div>
                     </Popup>
                   </Marker>
@@ -965,29 +1272,36 @@ export default function DashboardPage() {
         );
       }
       case 'table': {
-        const history = telemetryHistory[widget.deviceEUI || ''] || [];
-        const resolvedCols = resolveTableColumns(widget.tableColumns, targetDevice?.deviceType);
+        // Resolve which device EUIs this table covers
+        const tableEUIs: string[] = (() => {
+          if (widget.selectedDevices && widget.selectedDevices.length > 0) return widget.selectedDevices;
+          if (widget.deviceGroupId) {
+            const grp = deviceGroups.find(g => g.id === widget.deviceGroupId) ||
+              (JSON.parse(localStorage.getItem('device_groups') || '[]') as DeviceGroup[]).find(g => g.id === widget.deviceGroupId);
+            return grp?.deviceEUIs || [];
+          }
+          return widget.deviceEUI ? [widget.deviceEUI] : [];
+        })();
+
+        const isMulti = tableEUIs.length > 1;
+        const firstEUI = tableEUIs[0] || '';
+        const firstDev = devices.find(d => d.devEUI === firstEUI);
+        const resolvedCols = resolveTableColumns(widget.tableColumns, firstDev?.deviceType);
 
         const renderCell = (col: TableColumnConfig, h: TelemetryRecord) => {
+          if (!h) return '—';
           const key = col.key;
-          const payload = h.decodedPayload as Record<string, any>;
+          const payload = h.decodedPayload ? h.decodedPayload as Record<string, any> : {};
           switch (key) {
-            case 'receivedAt':
-              return format(new Date(h.receivedAt), 'dd/MM HH:mm:ss');
-            case 'rssi':
-              return `${h.rssi} dBm`;
-            case 'snr':
-              return `${h.snr} dB`;
-            case 'fPort':
-              return h.fPort;
-            case 'fCnt':
-              return h.fCnt;
-            case 'devEUI':
-              return h.devEUI;
-            default:
+            case 'receivedAt': return format(new Date(h.receivedAt), 'dd/MM HH:mm:ss');
+            case 'rssi': return `${h.rssi} dBm`;
+            case 'snr': return `${h.snr} dB`;
+            case 'fPort': return h.fPort;
+            case 'fCnt': return h.fCnt;
+            case 'devEUI': return h.devEUI;
+            default: {
               const val = payload?.[key];
               if (val === null || val === undefined) return '—';
-              
               let unitSuffix = col.unit ? ` ${col.unit}` : '';
               if (!col.unit) {
                 if (key === 'flow') unitSuffix = ' L/h';
@@ -998,45 +1312,82 @@ export default function DashboardPage() {
                 else if (key === 'pressure') unitSuffix = ' bar';
                 else if (key === 'totalConsumption') unitSuffix = ' m³';
               }
-              
-              return `${typeof val === 'number' ? val.toFixed(1) : String(val)}${unitSuffix}`;
+              const numVal = Number(val);
+              return `${!isNaN(numVal) ? numVal.toFixed(1) : String(val)}${unitSuffix}`;
+            }
           }
         };
 
+        const cellStyle = (col: TableColumnConfig) => ({
+          padding: '8px',
+          whiteSpace: col.key === 'receivedAt' ? 'nowrap' as const : 'normal' as const,
+          fontFamily: ['rssi','snr','fPort','fCnt','devEUI'].includes(col.key) ? 'monospace' : 'inherit',
+        });
+
+        if (isMulti) {
+          // One row per device showing its latest telemetry record
+          const latestPerDevice: { devName: string; record: TelemetryRecord | null }[] = tableEUIs.map(eui => {
+            const dev = devices.find(d => d.devEUI === eui);
+            const hist = telemetryHistory[eui] || [];
+            const filtered = getFilteredTelemetry(hist);
+            return { devName: dev?.name || eui.substring(0, 8), record: filtered[0] || null };
+          });
+
+          return (
+            <div style={{ marginTop: 12, overflowX: 'auto', maxHeight: getContentHeight(widget), overflowY: 'auto' }}>
+              <table className="table" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap', color: 'var(--teal-dark)', fontWeight: 650 }}>Dispositivo</th>
+                    {resolvedCols.map((col, idx) => (
+                      <th key={`${col.key}-${idx}`} style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                        {col.label} {col.unit && !['rssi','snr'].includes(col.key) ? `(${col.unit})` : ''}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestPerDevice.length === 0 ? (
+                    <tr><td colSpan={resolvedCols.length + 1} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>No hay telemetrías registradas</td></tr>
+                  ) : (
+                    latestPerDevice.map(({ devName, record }, i) => (
+                      <tr key={i} style={{ borderBottom: '0.5px solid var(--color-border)' }}>
+                        <td style={{ padding: '8px', fontWeight: 550, whiteSpace: 'nowrap', color: 'var(--teal-dark)', fontSize: 10 }}>{devName}</td>
+                        {resolvedCols.map((col, idx) => (
+                          <td key={`${col.key}-${idx}`} style={cellStyle(col)}>{record ? renderCell(col, record) : '—'}</td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        // Single device table
+        const history = telemetryHistory[firstEUI] || [];
+        const filteredHistory = getFilteredTelemetry(history);
         return (
-          <div style={{ marginTop: 12, overflowX: 'auto', maxHeight: 200, overflowY: 'auto' }}>
+          <div style={{ marginTop: 12, overflowX: 'auto', maxHeight: getContentHeight(widget), overflowY: 'auto' }}>
             <table className="table" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
                   {resolvedCols.map((col, idx) => (
                     <th key={`${col.key}-${idx}`} style={{ padding: '8px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {col.label} {col.unit && col.key !== 'rssi' && col.key !== 'snr' ? `(${col.unit})` : ''}
+                      {col.label} {col.unit && !['rssi','snr'].includes(col.key) ? `(${col.unit})` : ''}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {history.length === 0 ? (
-                  <tr>
-                    <td colSpan={resolvedCols.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>
-                      No hay telemetrías registradas
-                    </td>
-                  </tr>
+                {filteredHistory.length === 0 ? (
+                  <tr><td colSpan={resolvedCols.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-hint)' }}>No hay telemetrías registradas en este período</td></tr>
                 ) : (
-                  history.slice(0, 10).map((h, i) => (
+                  filteredHistory.slice(0, 20).map((h, i) => (
                     <tr key={i} style={{ borderBottom: '0.5px solid var(--color-border)' }}>
                       {resolvedCols.map((col, idx) => (
-                        <td 
-                          key={`${col.key}-${idx}`} 
-                          style={{ 
-                            padding: '8px', 
-                            whiteSpace: col.key === 'receivedAt' ? 'nowrap' : 'normal',
-                            fontFamily: (col.key === 'rssi' || col.key === 'snr' || col.key === 'fPort' || col.key === 'fCnt' || col.key === 'devEUI') ? 'monospace' : 'inherit',
-                            color: col.key === 'receivedAt' ? 'var(--color-text)' : 'inherit'
-                          }}
-                        >
-                          {renderCell(col, h)}
-                        </td>
+                        <td key={`${col.key}-${idx}`} style={cellStyle(col)}>{renderCell(col, h)}</td>
                       ))}
                     </tr>
                   ))
@@ -1057,111 +1408,221 @@ export default function DashboardPage() {
       {/* VISTA 1: CATALOGO CENTRAL DE FILAS GRANDES */}
       {activeTab === 'list' && (
         <div className="dashboards-container">
-          
-          <div className="page-header" style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+
+          <div className="page-header" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h2 className="page-title" style={{ fontSize: 24, fontWeight: 700 }}>Mis Dashboards</h2>
-              <p className="page-subtitle">Selecciona, edita o crea tus tableros de control personalizados.</p>
+              <h2 className="page-title" style={{ fontSize: 24, fontWeight: 700 }}>
+                {listView === 'dashboards' ? 'Mis Dashboards' : 'Grupos de Dispositivos'}
+              </h2>
+              <p className="page-subtitle">
+                {listView === 'dashboards'
+                  ? 'Selecciona, edita o crea tus tableros de control personalizados.'
+                  : 'Gestiona conjuntos de sensores para comparar telemetría en paneles de línea o tabla.'}
+              </p>
             </div>
-            <button 
-              className="btn-primary" 
-              onClick={() => setIsCreateModalOpen(true)}
+            <button
+              className="btn-primary"
+              onClick={() => listView === 'dashboards' ? setIsCreateModalOpen(true) : handleOpenAddGroup()}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px' }}
             >
               <Plus size={16} />
-              <span>Crear Dashboard</span>
+              <span>{listView === 'dashboards' ? 'Crear Dashboard' : 'Crear Grupo'}</span>
             </button>
           </div>
 
-          {/* Listado de dashboards en Filas Grandes adaptables */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {filteredDashboards.map((dash) => (
-              <div key={dash.id} className="dash-row-wrapper">
-                {/* Lado izquierdo/Centro: Fila Grande y Bella Clickable para Entrar */}
-                <div 
-                  onClick={() => { setActiveTab(dash.id); setIsEditing(false); }}
-                  className="dash-row-card"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                    <div style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 12,
-                      background: 'var(--teal-bg)',
-                      color: 'var(--teal-dark)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
-                      flexShrink: 0
-                    }}>
-                      {renderDashboardIcon(dash.icon, 26)}
-                    </div>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
-                        {dash.name}
-                      </h3>
-                      <p style={{ margin: 0, marginTop: 4, fontSize: 13, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span>{dash.widgets.length} {dash.widgets.length === 1 ? 'panel configurado' : 'paneles configurados'}</span>
-                        {dash.isPreset && (
-                          <span 
-                            style={{ 
-                              fontSize: 10, 
-                              fontWeight: 550,
-                              padding: '2px 8px', 
-                              borderRadius: 6,
-                              background: 'var(--teal-bg)', 
-                              color: 'var(--teal-dark)'
-                            }}
-                          >
-                            Plantilla Preconfigurada
-                          </span>
-                        )}
-                        {user?.role === 'superadmin' && (
-                          <span 
-                            style={{ 
-                              fontSize: 10, 
-                              fontWeight: 550,
-                              padding: '2px 8px', 
-                              borderRadius: 6,
-                              background: 'var(--color-bg-secondary)', 
-                              color: '#854F0B'
-                            }}
-                          >
-                            Cliente: {clients.find(c => c.id === (dash.organizationId || 'org1'))?.name || 'Empresa Demo S.A.'}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Flecha indicativa de entrada al lado derecho de la tarjeta */}
-                  <div style={{ color: 'var(--color-hint)', transition: 'transform 0.2s' }} className="enter-arrow">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                  </div>
-                </div>
-
-                {/* Lado derecho: Botón de Editar y Borrar "alado" (Fuera del elemento clickable) */}
-                <div className="dash-row-actions">
-                  <button 
-                    onClick={() => setEditingDashboard(dash)}
-                    className="dash-action-btn edit"
-                    title="Editar nombre e icono"
-                  >
-                    <Settings size={20} />
-                  </button>
-                  
-                  <button 
-                    onClick={() => handleDeleteDashboard(dash.id)}
-                    className="dash-action-btn delete"
-                    title="Eliminar Dashboard"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              </div>
-            ))}
+          {/* Tabs: Dashboards | Grupos */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--color-border)', paddingBottom: 12 }}>
+            <button
+              className={`btn-secondary ${listView === 'dashboards' ? 'active' : ''}`}
+              onClick={() => setListView('dashboards')}
+              style={{ padding: '6px 14px', fontSize: 13, fontWeight: 550, display: 'flex', alignItems: 'center', gap: 6, background: listView === 'dashboards' ? 'var(--teal-bg)' : 'transparent', borderColor: listView === 'dashboards' ? 'var(--teal)' : 'var(--color-border)', color: listView === 'dashboards' ? 'var(--teal-dark)' : 'var(--color-text)' }}
+            >
+              <LayoutDashboard size={14} />
+              Dashboards ({filteredDashboards.length})
+            </button>
+            <button
+              className={`btn-secondary ${listView === 'groups' ? 'active' : ''}`}
+              onClick={() => setListView('groups')}
+              style={{ padding: '6px 14px', fontSize: 13, fontWeight: 550, display: 'flex', alignItems: 'center', gap: 6, background: listView === 'groups' ? 'var(--teal-bg)' : 'transparent', borderColor: listView === 'groups' ? 'var(--teal)' : 'var(--color-border)', color: listView === 'groups' ? 'var(--teal-dark)' : 'var(--color-text)' }}
+            >
+              <Database size={14} />
+              Grupos ({filteredGroups.length})
+            </button>
           </div>
+
+          {/* SUB-VISTA: GRUPOS */}
+          {listView === 'groups' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+              {filteredGroups.map(grp => {
+                const isWater = grp.deviceType === 'water_meter';
+                return (
+                  <div key={grp.id} className="card animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: isWater ? '#E6F1FB' : '#FAEEDA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {isWater ? <Droplets size={16} style={{ color: '#185FA5' }} /> : <Trash2 size={16} style={{ color: '#854F0B' }} />}
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{grp.name}</h4>
+                          <span className={`type-badge ${isWater ? 'water' : 'bin'}`} style={{ marginTop: 4, display: 'inline-block' }}>
+                            {isWater ? 'Medidores' : 'SmartBins'} · {grp.deviceEUIs.length} dispositivos
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn-secondary" onClick={() => handleOpenEditGroup(grp)} style={{ padding: 4, minWidth: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar"><Settings size={13} /></button>
+                        <button className="btn-secondary" onClick={() => handleDeleteGroup(grp.id)} style={{ padding: 4, minWidth: 28, height: 28, background: '#FCEBEB', color: 'var(--red)', borderColor: '#F5C2C0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Eliminar"><Trash size={13} /></button>
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 650, color: 'var(--color-muted)', marginBottom: 6 }}>Dispositivos:</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 90, overflowY: 'auto' }}>
+                        {grp.deviceEUIs.map(eui => {
+                          const dev = devices.find(d => d.devEUI === eui);
+                          return (
+                            <div key={eui} style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 500 }}>{dev ? dev.name : `Dispositivo ${eui.substring(0, 8)}`}</span>
+                              <code style={{ fontSize: 9, color: 'var(--color-hint)' }}>{eui}</code>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {user?.role === 'superadmin' && (
+                      <div style={{ fontSize: 10, color: 'var(--color-hint)', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--color-bg)', padding: '4px 8px', borderRadius: 4, border: '0.5px solid var(--color-border)' }}>
+                        <Shield size={10} style={{ color: 'var(--teal)' }} />
+                        {clients.find(c => c.id === grp.organizationId)?.name || 'Empresa Demo S.A.'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredGroups.length === 0 && (
+                <div className="card" style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', borderStyle: 'dashed', borderWidth: 2, borderColor: 'var(--color-border)' }}>
+                  <Database size={32} style={{ margin: '0 auto 12px', color: 'var(--color-muted)' }} />
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Sin grupos creados</h4>
+                  <p className="text-muted" style={{ fontSize: 13, margin: '8px 0 20px', lineHeight: 1.5 }}>
+                    Los grupos te permiten comparar múltiples sensores en un mismo panel de línea o tabla.
+                  </p>
+                  <button className="btn-primary" onClick={handleOpenAddGroup} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Plus size={15} /> Crear Grupo
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUB-VISTA: DASHBOARDS */}
+          {listView === 'dashboards' && (
+            filteredDashboards.length === 0 ? (
+              <div className="card" style={{ padding: '60px 24px', textAlign: 'center', borderStyle: 'dashed', borderWidth: '2px', borderColor: 'var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ background: 'var(--color-bg)', padding: 16, borderRadius: '50%', color: 'var(--color-muted)', marginBottom: 16 }}>
+                  <LayoutDashboard size={36} className="text-teal-500" />
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, marginBottom: 8 }}>Sin Dashboards Creados</h3>
+                <p className="text-muted" style={{ fontSize: 13, maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.5 }}>
+                  No tienes ningún tablero de analítica configurado en este momento. ¡Crea el primero ahora!
+                </p>
+                <button 
+                  className="btn-primary" 
+                  onClick={() => setIsCreateModalOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Plus size={16} /> <span>Crear Dashboard</span>
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {filteredDashboards.map((dash) => (
+                  <div key={dash.id} className="dash-row-wrapper">
+                    {/* Lado izquierdo/Centro: Fila Grande y Bella Clickable para Entrar */}
+                    <div 
+                      onClick={() => { setActiveTab(dash.id); setIsEditing(false); }}
+                      className="dash-row-card"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <div style={{
+                          width: 52,
+                          height: 52,
+                          borderRadius: 12,
+                          background: 'var(--teal-bg)',
+                          color: 'var(--teal-dark)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
+                          flexShrink: 0
+                        }}>
+                          {renderDashboardIcon(dash.icon, 26)}
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                            {dash.name}
+                          </h3>
+                          <p style={{ margin: 0, marginTop: 4, fontSize: 13, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span>{dash.widgets.length} {dash.widgets.length === 1 ? 'panel configurado' : 'paneles configurados'}</span>
+                            {dash.isPreset && (
+                              <span 
+                                style={{ 
+                                  fontSize: 10, 
+                                  fontWeight: 550,
+                                  padding: '2px 8px', 
+                                  borderRadius: 6,
+                                  background: 'var(--teal-bg)', 
+                                  color: 'var(--teal-dark)'
+                                }}
+                              >
+                                Plantilla Preconfigurada
+                              </span>
+                            )}
+                            {user?.role === 'superadmin' && (
+                              <span 
+                                style={{ 
+                                  fontSize: 10, 
+                                  fontWeight: 550,
+                                  padding: '2px 8px', 
+                                  borderRadius: 6,
+                                  background: 'var(--color-bg-secondary)', 
+                                  color: '#854F0B'
+                                }}
+                              >
+                                Cliente: {clients.find(c => c.id === (dash.organizationId || 'plasticos_rival'))?.name || 'Plásticos Rival'}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Flecha indicativa de entrada al lado derecho de la tarjeta */}
+                      <div style={{ color: 'var(--color-hint)', transition: 'transform 0.2s' }} className="enter-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      </div>
+                    </div>
+
+                    {/* Lado derecho: Botón de Editar y Borrar "alado" (Fuera del elemento clickable) */}
+                    <div className="dash-row-actions">
+                      <button 
+                        onClick={() => setEditingDashboard(dash)}
+                        className="dash-action-btn edit"
+                        title="Editar nombre e icono"
+                      >
+                        <Settings size={20} />
+                      </button>
+                      
+                      <button 
+                        onClick={() => handleDeleteDashboard(dash.id)}
+                        className="dash-action-btn delete"
+                        title="Eliminar Dashboard"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+
         </div>
       )}
 
@@ -1221,6 +1682,344 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Barra de Filtro de Tiempo Premium (Glassmorphic) */}
+          <div style={{
+            position: 'relative',
+            zIndex: showCalendarPopover ? 1000 : 10,
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            padding: '12px 18px',
+            background: 'rgba(255, 255, 255, 0.45)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                Rango Temporal:
+              </span>
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px', border: '0.5px solid var(--color-border)' }}>
+                {(['2h', '4h', '24h', 'custom'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => {
+                      setTimeFilter(filter);
+                      if (filter === 'custom') {
+                        const end = new Date();
+                        const start = new Date(Date.now() - 24 * 3600000);
+                        const formatDT = (d: Date) => {
+                          const year = d.getFullYear();
+                          const month = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          const hours = String(d.getHours()).padStart(2, '0');
+                          const minutes = String(d.getMinutes()).padStart(2, '0');
+                          return `${year}-${month}-${day}T${hours}:${minutes}`;
+                        };
+                        setCustomStart(formatDT(start));
+                        setCustomEnd(formatDT(end));
+                      }
+                    }}
+                    className={`btn-secondary ${timeFilter === filter ? 'active' : ''}`}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      minWidth: 'auto',
+                      height: '28px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: timeFilter === filter ? 'var(--teal)' : 'transparent',
+                      color: timeFilter === filter ? 'white' : 'var(--color-text)',
+                      boxShadow: timeFilter === filter ? '0 2px 8px rgba(29, 158, 117, 0.25)' : 'none',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {filter === '2h' ? 'Últimas 2h' :
+                     filter === '4h' ? 'Últimas 4h' :
+                     filter === '24h' ? 'Últimas 24h' : 'Personalizado'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {timeFilter === 'custom' && (
+              <div 
+                style={{ 
+                  position: 'relative',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '10px', 
+                  animation: 'fadeIn 0.25s ease-out',
+                  flexWrap: 'wrap',
+                  zIndex: showCalendarPopover ? 100 : 1
+                }}
+              >
+                <button
+                  onClick={() => setShowCalendarPopover(!showCalendarPopover)}
+                  className="btn-secondary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 650,
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '0.5px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  <Calendar size={14} style={{ color: 'var(--teal)' }} />
+                  <span>
+                    {customStart && customEnd 
+                      ? `${formatDateLabel(customStart)} a ${formatDateLabel(customEnd)}`
+                      : 'Seleccionar rango...'}
+                  </span>
+                </button>
+
+                {showCalendarPopover && (
+                  <>
+                    {/* Backdrop transparente para cerrar */}
+                    <div 
+                      onClick={() => setShowCalendarPopover(false)}
+                      style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        zIndex: 998,
+                        background: 'transparent'
+                      }}
+                    />
+                    
+                    {/* Popover del Calendario */}
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        marginTop: '8px',
+                        width: '320px',
+                        background: 'var(--color-surface)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08)',
+                        padding: '16px',
+                        zIndex: 999,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        animation: 'fadeIn 0.18s ease-out'
+                      }}
+                    >
+                      {/* Cabecera del mes */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
+                            setCalendarViewDate(newDate);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-text)',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}>
+                          {MONTH_NAMES[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
+                            setCalendarViewDate(newDate);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-text)',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+
+                      {/* Días de la semana */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '10px', fontWeight: 750, color: 'var(--color-muted)', textTransform: 'uppercase' }}>
+                        {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => <span key={d}>{d}</span>)}
+                      </div>
+
+                      {/* Cuadrícula de días */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                        {getCalendarCells().map((cell, idx) => {
+                          const isStart = customStart && isSameDay(cell.date, new Date(customStart));
+                          const isEnd = customEnd && isSameDay(cell.date, new Date(customEnd));
+                          const inRange = isWithinRange(cell.date);
+                          const hovered = isHoverRange(cell.date);
+                          const active = isStart || isEnd;
+                          const activeOrInRange = active || inRange || hovered;
+
+                          let dayBg = 'transparent';
+                          let dayColor = cell.isCurrentMonth ? 'var(--color-text)' : 'var(--color-muted)';
+                          let dayBorderRadius = '6px';
+
+                          if (active) {
+                            dayBg = 'var(--teal)';
+                            dayColor = 'white';
+                          } else if (inRange || hovered) {
+                            dayBg = 'rgba(29, 158, 117, 0.12)';
+                            dayColor = 'var(--teal)';
+                          }
+
+                          // Border radius adaptativo premium
+                          if (customStart && customEnd) {
+                            const startT = new Date(customStart).setHours(0,0,0,0);
+                            const endT = new Date(customEnd).setHours(0,0,0,0);
+                            const cellT = cell.date.getTime();
+                            if (cellT === startT) {
+                              dayBorderRadius = '6px 0 0 6px';
+                            } else if (cellT === endT) {
+                              dayBorderRadius = '0 6px 6px 0';
+                            } else if (cellT > startT && cellT < endT) {
+                              dayBorderRadius = '0';
+                            }
+                          }
+
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleCalendarDayClick(cell.date)}
+                              onMouseEnter={() => setCalendarHoverDate(cell.date)}
+                              onMouseLeave={() => setCalendarHoverDate(null)}
+                              style={{
+                                background: dayBg,
+                                color: dayColor,
+                                border: 'none',
+                                borderRadius: dayBorderRadius,
+                                height: '28px',
+                                fontSize: '11px',
+                                fontWeight: activeOrInRange ? 700 : 500,
+                                cursor: 'pointer',
+                                transition: 'all 0.1s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {cell.date.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Ajuste de horas */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', borderTop: '0.5px solid var(--color-border)', paddingTop: '10px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-muted)' }}>Desde:</span>
+                          <input 
+                            type="time" 
+                            value={customStart ? customStart.split('T')[1] || '00:00' : '00:00'}
+                            onChange={(e) => {
+                              if (customStart) {
+                                const datePart = customStart.split('T')[0];
+                                setCustomStart(`${datePart}T${e.target.value}`);
+                              }
+                            }}
+                            style={{
+                              fontSize: '11px',
+                              padding: '4px 6px',
+                              borderRadius: '6px',
+                              border: '0.5px solid var(--color-border)',
+                              background: 'var(--color-bg)',
+                              color: 'var(--color-text)',
+                              outline: 'none',
+                              width: '100%'
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-muted)' }}>Hasta:</span>
+                          <input 
+                            type="time" 
+                            value={customEnd ? customEnd.split('T')[1] || '23:59' : '23:59'}
+                            onChange={(e) => {
+                              if (customEnd) {
+                                const datePart = customEnd.split('T')[0];
+                                setCustomEnd(`${datePart}T${e.target.value}`);
+                              }
+                            }}
+                            style={{
+                              fontSize: '11px',
+                              padding: '4px 6px',
+                              borderRadius: '6px',
+                              border: '0.5px solid var(--color-border)',
+                              background: 'var(--color-bg)',
+                              color: 'var(--color-text)',
+                              outline: 'none',
+                              width: '100%'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Botón de Aplicar */}
+                      <button
+                        type="button"
+                        onClick={() => setShowCalendarPopover(false)}
+                        className="btn-primary"
+                        style={{
+                          height: '28px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          borderRadius: '6px',
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginTop: '4px',
+                          padding: '0'
+                        }}
+                      >
+                        Aplicar Filtro
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Lienzo del Dashboard */}
           <div>
             {activeDashboard.widgets.length === 0 && (
@@ -1263,7 +2062,14 @@ export default function DashboardPage() {
                         position: 'relative',
                         display: 'flex',
                         flexDirection: 'column',
-                        minHeight: widget.type === 'kpi' ? 'auto' : '300px',
+                        minHeight: (() => {
+                          if (widget.type === 'kpi') return 'auto';
+                          const h = widget.height || 'medium';
+                          if (h === 'short') return '220px';
+                          if (h === 'tall') return '460px';
+                          if (h === 'extra-tall') return '580px';
+                          return '340px'; // 'medium'
+                        })(),
                         overflow: 'hidden',
                         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                       }}
@@ -1311,37 +2117,65 @@ export default function DashboardPage() {
                       {isEditing && (
                         <div className="widget-edit-toolbar" style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
+                          flexDirection: 'column',
+                          padding: '10px 12px',
                           background: 'var(--color-bg-secondary)',
                           borderTop: '1px solid var(--color-border)',
                           fontSize: '11px',
-                          gap: '6px',
+                          gap: '8px',
                           marginTop: 'auto'
                         }}>
-                          <span style={{ color: 'var(--color-muted)', fontWeight: 600 }}>Ajustar Ancho:</span>
-                          <div style={{ display: 'flex', gap: '3px' }}>
-                            {(['third', 'half', 'two-thirds', 'full'] as const).map((wSize) => (
-                              <button
-                                key={wSize}
-                                onClick={() => handleResizeWidget(widget.id, wSize)}
-                                className={`btn-secondary ${widget.width === wSize || (!widget.width && wSize === 'half') ? 'active' : ''}`}
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '10px',
-                                  minWidth: 'auto',
-                                  height: '24px',
-                                  background: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-bg)' : 'transparent',
-                                  borderColor: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal)' : 'var(--color-border)',
-                                  color: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-dark)' : 'var(--color-text)',
-                                  borderRadius: '4px'
-                                }}
-                              >
-                                {wSize === 'third' ? '1/3' : wSize === 'half' ? '1/2' : wSize === 'two-thirds' ? '2/3' : '100%'}
-                              </button>
-                            ))}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                            <span style={{ color: 'var(--color-muted)', fontWeight: 600 }}>Ancho:</span>
+                            <div style={{ display: 'flex', gap: '3px' }}>
+                              {(['third', 'half', 'two-thirds', 'full'] as const).map((wSize) => (
+                                <button
+                                  key={wSize}
+                                  onClick={() => handleResizeWidget(widget.id, wSize)}
+                                  className={`btn-secondary ${widget.width === wSize || (!widget.width && wSize === 'half') ? 'active' : ''}`}
+                                  style={{
+                                    padding: '2px 8px',
+                                    fontSize: '10px',
+                                    minWidth: 'auto',
+                                    height: '24px',
+                                    background: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-bg)' : 'transparent',
+                                    borderColor: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal)' : 'var(--color-border)',
+                                    color: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-dark)' : 'var(--color-text)',
+                                    borderRadius: '4px'
+                                  }}
+                                >
+                                  {wSize === 'third' ? '1/3' : wSize === 'half' ? '1/2' : wSize === 'two-thirds' ? '2/3' : '100%'}
+                                </button>
+                              ))}
+                            </div>
                           </div>
+                          
+                          {widget.type !== 'kpi' && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                              <span style={{ color: 'var(--color-muted)', fontWeight: 600 }}>Largo:</span>
+                              <div style={{ display: 'flex', gap: '3px' }}>
+                                {(['short', 'medium', 'tall', 'extra-tall'] as const).map((hSize) => (
+                                  <button
+                                    key={hSize}
+                                    onClick={() => handleResizeWidgetHeight(widget.id, hSize)}
+                                    className={`btn-secondary ${widget.height === hSize || (!widget.height && hSize === 'medium') ? 'active' : ''}`}
+                                    style={{
+                                      padding: '2px 8px',
+                                      fontSize: '10px',
+                                      minWidth: 'auto',
+                                      height: '24px',
+                                      background: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal-bg)' : 'transparent',
+                                      borderColor: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal)' : 'var(--color-border)',
+                                      color: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal-dark)' : 'var(--color-text)',
+                                      borderRadius: '4px'
+                                    }}
+                                  >
+                                    {hSize === 'short' ? 'Corto' : hSize === 'medium' ? 'Medio' : hSize === 'tall' ? 'Alto' : 'Extra'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1414,12 +2248,10 @@ export default function DashboardPage() {
                   onChange={(e: any) => {
                     setNewDashPreset(e.target.value);
                     if (e.target.value === 'water_meters') setNewDashIcon('Droplets');
-                    else if (e.target.value === 'smartbins') setNewDashIcon('Trash2');
                   }}
                 >
                   <option value="blank">Lienzo en Blanco (Empezar de cero)</option>
                   <option value="water_meters">Medidores de Agua (KPIs + Caudales preconfigurados)</option>
-                  <option value="smartbins">SmartBins (Llenado + Baterías preconfigurados)</option>
                 </select>
               </div>
 
@@ -1532,7 +2364,7 @@ export default function DashboardPage() {
       {/* DRAWER DESLIZANTE LATERAL: AGREGAR O EDITAR PANEL */}
       {drawerMode !== null && (
         <div className="slide-over-overlay" onClick={() => { setDrawerMode(null); setEditingWidget(null); }}>
-          <div className="slide-over-drawer" onClick={(e) => e.stopPropagation()}>
+          <div className="slide-over-drawer wide-drawer" onClick={(e) => e.stopPropagation()}>
             
             {/* Cabecera del Drawer */}
             <div className="drawer-header">
@@ -1554,17 +2386,15 @@ export default function DashboardPage() {
             </div>
 
             {/* Cuerpo del Drawer */}
-            <div className="drawer-body">
+            <div className="drawer-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px 20px' }}>
               
               {/* 1. SELECCIÓN DE TIPO DE VISUALIZACIÓN */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 650, color: 'var(--color-text)', marginBottom: '8px', display: 'block' }}>
-                  1. Tipo de Visualización *
-                </label>
+              <div className="drawer-form-section">
+                <div className="drawer-form-section-title">1. Tipo de Visualización *</div>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-                  gap: '10px'
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                  gap: '12px'
                 }}>
                   {[
                     {
@@ -1610,7 +2440,9 @@ export default function DashboardPage() {
                       preview: (
                         <div style={{ padding: '4px', background: 'var(--color-bg)', borderRadius: '6px', border: '1px solid var(--color-border)', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', height: '24px', overflow: 'hidden', marginTop: '2px' }}>
                           <div style={{ width: '100%', height: '100%', background: '#e0f2f1', position: 'absolute', opacity: 0.4 }}></div>
-                          <span style={{ fontSize: '10px', zIndex: 1 }}>📍 Pin GPS</span>
+                          <span style={{ fontSize: '10px', zIndex: 1, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <MapPin size={10} style={{ color: 'var(--teal)' }} /> Pin GPS
+                          </span>
                         </div>
                       )
                     },
@@ -1662,23 +2494,23 @@ export default function DashboardPage() {
                       style={{
                         border: newWidgetType === item.value ? '2px solid var(--teal)' : '1px solid var(--color-border)',
                         borderRadius: '10px',
-                        padding: '10px 8px',
+                        padding: '12px 10px',
                         cursor: 'pointer',
                         background: newWidgetType === item.value ? 'var(--teal-bg)' : 'var(--color-surface)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '4px',
+                        gap: '6px',
                         textAlign: 'center',
                         transition: 'all 0.2s ease',
-                        boxShadow: newWidgetType === item.value ? '0 4px 10px rgba(29,158,117,0.08)' : 'none'
+                        boxShadow: newWidgetType === item.value ? '0 4px 12px rgba(29,158,117,0.12)' : 'none'
                       }}
                     >
-                      <span style={{ fontSize: '11px', fontWeight: 650, color: newWidgetType === item.value ? 'var(--teal-dark)' : 'var(--color-text)' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 650, color: newWidgetType === item.value ? 'var(--teal-dark)' : 'var(--color-text)' }}>
                         {item.label}
                       </span>
                       {item.preview}
-                      <span style={{ fontSize: '9px', color: 'var(--color-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--color-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
                         {item.desc}
                       </span>
                     </div>
@@ -1686,362 +2518,237 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 2. TÍTULO E ICONO PERSONALIZADO */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>2. Título del Panel *</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="Ej. Caudal Zona Norte, Sensor Llenado..." 
-                    value={newWidgetTitle} 
-                    onChange={(e) => setNewWidgetTitle(e.target.value)}
-                  />
-                </div>
+              {/* 2. INFORMACIÓN GENERAL Y ASPECTO */}
+              <div className="drawer-form-section">
+                <div className="drawer-form-section-title">2. Información General e Icono</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Título del Panel *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Ej. Caudal Zona Norte, Sensor Llenado..." 
+                      value={newWidgetTitle} 
+                      onChange={(e) => setNewWidgetTitle(e.target.value)}
+                      style={{ height: '42px' }}
+                    />
+                  </div>
 
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Icono Visual</label>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(6, 1fr)',
-                    gap: '4px'
-                  }}>
-                    {[
-                      'Gauge', 'Droplets', 'Trash2', 'Thermometer', 'Battery', 'Activity',
-                      'Wind', 'Zap', 'Lightbulb', 'Map', 'Database', 'Waves'
-                    ].map((icName) => (
-                      <button
-                        key={icName}
-                        type="button"
-                        onClick={() => setNewWidgetIcon(icName)}
-                        className={`btn-secondary ${newWidgetIcon === icName ? 'active' : ''}`}
-                        style={{
-                          padding: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: newWidgetIcon === icName ? 'var(--teal-bg)' : 'transparent',
-                          borderColor: newWidgetIcon === icName ? 'var(--teal)' : 'var(--color-border)',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          height: '38px',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <span style={{ color: newWidgetIcon === icName ? 'var(--teal-dark)' : 'var(--color-text)', display: 'inline-flex' }}>
-                          {renderDashboardIcon(icName, 15)}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Icono Visual</label>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(6, 1fr)',
+                      gap: '6px'
+                    }}>
+                      {[
+                        'Gauge', 'Droplets', 'Trash2', 'Thermometer', 'Battery', 'Activity',
+                        'Wind', 'Zap', 'Lightbulb', 'Map', 'Database', 'Waves'
+                      ].map((icName) => (
+                        <button
+                          key={icName}
+                          type="button"
+                          onClick={() => setNewWidgetIcon(icName)}
+                          className={`btn-secondary ${newWidgetIcon === icName ? 'active' : ''}`}
+                          style={{
+                            padding: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: newWidgetIcon === icName ? 'var(--teal-bg)' : 'var(--color-surface)',
+                            borderColor: newWidgetIcon === icName ? 'var(--teal)' : 'var(--color-border)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            height: '42px',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span style={{ color: newWidgetIcon === icName ? 'var(--teal-dark)' : 'var(--color-text)', display: 'inline-flex' }}>
+                            {renderDashboardIcon(icName, 16)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* 3. SELECCIÓN DE DISPOSITIVO O GRUPO DE ORIGEN (KPI, LÍNEA, TABLA) */}
+              {/* 3. CONFIGURACIÓN DEL ORIGEN DE DATOS */}
               {newWidgetType !== 'bar' && newWidgetType !== 'map' && (
-                <div className="form-group">
-                  {/* Selector de Origen de Datos para Línea/Área */}
+                <div className="drawer-form-section">
+                  <div className="drawer-form-section-title">3. Origen de Datos</div>
+
+                  {/* Selector de Origen para Línea */}
                   {newWidgetType === 'line' && (
                     <div style={{ marginBottom: 12 }}>
                       <label className="form-label" style={{ fontWeight: 650, display: 'block', marginBottom: 6 }}>
-                        3. Origen de Datos para Historial *
+                        Tipo de Origen para Historial *
                       </label>
-                      <div style={{ display: 'flex', gap: 14 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-                          <input
-                            type="radio"
-                            name="widgetSourceType"
-                            checked={newWidgetSourceType === 'single'}
-                            onChange={() => {
-                              setNewWidgetSourceType('single');
-                              setNewWidgetDeviceGroupId('');
-                              setShowNewGroupForm(false);
-                            }}
-                            style={{ accentColor: 'var(--teal)' }}
-                          />
+                      <div style={{ display: 'flex', gap: 20 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="radio" name="widgetSourceType" checked={newWidgetSourceType === 'single'}
+                            onChange={() => { setNewWidgetSourceType('single'); setNewWidgetDeviceGroupId(''); }}
+                            style={{ accentColor: 'var(--teal)' }} />
                           <span style={{ fontWeight: 500 }}>Dispositivo Único</span>
                         </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-                          <input
-                            type="radio"
-                            name="widgetSourceType"
-                            checked={newWidgetSourceType === 'group'}
-                            onChange={() => {
-                              setNewWidgetSourceType('group');
-                              setNewWidgetDevice('');
-                              setShowNewGroupForm(false);
-                            }}
-                            style={{ accentColor: 'var(--teal)' }}
-                          />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="radio" name="widgetSourceType" checked={newWidgetSourceType === 'group'}
+                            onChange={() => { setNewWidgetSourceType('group'); setNewWidgetDevice(''); }}
+                            style={{ accentColor: 'var(--teal)' }} />
                           <span style={{ fontWeight: 500 }}>Grupo de Dispositivos</span>
                         </label>
                       </div>
                     </div>
                   )}
 
-                  {/* CASO A: Dispositivo Único (OBLIGATORIO para KPI y Tabla, o si se eligió Dispositivo Único en Línea) */}
-                  {(newWidgetType !== 'line' || newWidgetSourceType === 'single') ? (
-                    <div>
-                      <label className="form-label" style={{ fontWeight: 600 }}>
-                        {newWidgetType === 'line' ? 'Seleccionar Dispositivo *' : '3. Dispositivo IoT de Origen *'}
+                  {/* Selector de Origen para Tabla */}
+                  {newWidgetType === 'table' && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="form-label" style={{ fontWeight: 650, display: 'block', marginBottom: 6 }}>
+                        Tipo de Origen de la Tabla *
                       </label>
-                      <select 
-                        className="form-input" 
-                        value={newWidgetDevice} 
+                      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="radio" name="widgetSourceType" checked={newWidgetSourceType === 'single'}
+                            onChange={() => { setNewWidgetSourceType('single'); setNewWidgetDeviceGroupId(''); setNewWidgetSelectedDevices([]); }}
+                            style={{ accentColor: 'var(--teal)' }} />
+                          <span style={{ fontWeight: 500 }}>Dispositivo Único</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="radio" name="widgetSourceType" checked={newWidgetSourceType === 'multi'}
+                            onChange={() => { setNewWidgetSourceType('multi'); setNewWidgetDevice(''); setNewWidgetDeviceGroupId(''); }}
+                            style={{ accentColor: 'var(--teal)' }} />
+                          <span style={{ fontWeight: 500 }}>Múltiples Dispositivos</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="radio" name="widgetSourceType" checked={newWidgetSourceType === 'group'}
+                            onChange={() => { setNewWidgetSourceType('group'); setNewWidgetDevice(''); setNewWidgetSelectedDevices([]); }}
+                            style={{ accentColor: 'var(--teal)' }} />
+                          <span style={{ fontWeight: 500 }}>Grupo de Dispositivos</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CASO A: Dispositivo Único */}
+                  {(newWidgetType === 'kpi' ||
+                    (newWidgetType === 'line' && newWidgetSourceType === 'single') ||
+                    (newWidgetType === 'table' && newWidgetSourceType === 'single')
+                  ) && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, marginBottom: 6, display: 'block' }}>
+                        Seleccionar Dispositivo *
+                      </label>
+                      <select
+                        className="form-input"
+                        value={newWidgetDevice}
                         onChange={(e) => {
                           setNewWidgetDevice(e.target.value);
                           const dev = devices.find(d => d.devEUI === e.target.value);
                           if (dev) {
-                            if (dev.deviceType === 'water_meter') {
-                              setNewWidgetMetric('flow');
-                              setNewWidgetUnit('L/h');
-                              setNewWidgetColor('teal');
-                            } else {
-                              setNewWidgetMetric('fillLevel');
-                              setNewWidgetUnit('%');
-                              setNewWidgetColor('amber');
-                            }
+                            if (dev.deviceType === 'water_meter') { setNewWidgetMetric('flow'); setNewWidgetUnit('L/h'); setNewWidgetColor('teal'); }
+                            else { setNewWidgetMetric('fillLevel'); setNewWidgetUnit('%'); setNewWidgetColor('amber'); }
                           }
                         }}
+                        style={{ height: '42px' }}
                       >
                         <option value="">Selecciona un dispositivo...</option>
                         {filteredDevices.map(d => (
                           <option key={d.devEUI} value={d.devEUI}>
-                            {d.name} ({d.deviceType === 'water_meter' ? '💧 Medidor' : '🗑️ SmartBin'})
+                            {d.name} ({d.deviceType === 'water_meter' ? 'Medidor' : 'SmartBin'})
                           </option>
                         ))}
                       </select>
                     </div>
-                  ) : (
-                    /* CASO B: Grupo de Dispositivos (Solo Línea) */
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  )}
+
+                  {/* CASO B: Múltiples Dispositivos (Solo Tabla) */}
+                  {newWidgetType === 'table' && newWidgetSourceType === 'multi' && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                         <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
-                          Seleccionar Grupo de Dispositivos *
+                          Selecciona los Dispositivos a Combinar *
                         </label>
-                        {!showNewGroupForm && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowNewGroupForm(true);
-                              setInlineGroupName('');
-                              setInlineGroupType('water_meter');
-                              setInlineGroupSelectedDevices([]);
-                            }}
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 600,
-                              color: 'var(--teal-dark)',
-                              background: 'var(--teal-bg)',
-                              border: '1px solid var(--teal)',
-                              borderRadius: 6,
-                              padding: '2px 8px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            + Nuevo Grupo Inline
-                          </button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" className="btn-secondary"
+                            onClick={() => setNewWidgetSelectedDevices(filteredDevices.map(d => d.devEUI))}
+                            style={{ padding: '2px 8px', fontSize: 11, height: 24, minWidth: 'auto' }}>Todos</button>
+                          <button type="button" className="btn-secondary"
+                            onClick={() => setNewWidgetSelectedDevices([])}
+                            style={{ padding: '2px 8px', fontSize: 11, height: 24, minWidth: 'auto' }}>Limpiar</button>
+                        </div>
+                      </div>
+                      <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--color-muted)' }}>
+                        Elige 2 o más sensores. Sus telemetrías aparecerán combinadas con una columna "Dispositivo".
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 8, padding: 8, background: 'var(--color-bg)' }}>
+                        {filteredDevices.map(d => {
+                          const isSel = newWidgetSelectedDevices.includes(d.devEUI);
+                          return (
+                            <label key={d.devEUI} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 6px', borderRadius: 6, background: isSel ? 'var(--teal-bg)' : 'transparent', cursor: 'pointer', userSelect: 'none' }}>
+                              <input type="checkbox" checked={isSel} style={{ accentColor: 'var(--teal)' }}
+                                onChange={(e) => {
+                                  if (e.target.checked) setNewWidgetSelectedDevices([...newWidgetSelectedDevices, d.devEUI]);
+                                  else setNewWidgetSelectedDevices(newWidgetSelectedDevices.filter(id => id !== d.devEUI));
+                                }} />
+                              <span style={{ fontWeight: 550 }}>{d.name}</span>
+                              <span style={{ fontSize: 10, color: 'var(--color-hint)', fontFamily: 'monospace', marginLeft: 'auto' }}>{d.devEUI}</span>
+                            </label>
+                          );
+                        })}
+                        {filteredDevices.length === 0 && (
+                          <div style={{ fontSize: 11, color: 'var(--color-hint)', textAlign: 'center', padding: 12 }}>
+                            No hay dispositivos disponibles para este cliente.
+                          </div>
                         )}
                       </div>
+                      {newWidgetSelectedDevices.length > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--teal-dark)', marginTop: 6, fontWeight: 500 }}>
+                          {newWidgetSelectedDevices.length} dispositivo{newWidgetSelectedDevices.length !== 1 ? 's' : ''} seleccionado{newWidgetSelectedDevices.length !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                      {!showNewGroupForm ? (
+                  {/* CASO C: Grupo de Dispositivos (Línea o Tabla) */}
+                  {((newWidgetType === 'line' || newWidgetType === 'table') && newWidgetSourceType === 'group') && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, marginBottom: 6, display: 'block' }}>
+                        Seleccionar Grupo de Dispositivos *
+                      </label>
+                      {filteredGroups.length === 0 ? (
+                        <div style={{ padding: '12px', border: '1px dashed var(--color-border)', borderRadius: 8, fontSize: 12, color: 'var(--color-muted)', textAlign: 'center' }}>
+                          No hay grupos creados para este cliente. Ve a la pantalla de Dashboard → pestaña "Grupos" para crear uno.
+                        </div>
+                      ) : (
                         <select
                           className="form-input"
                           value={newWidgetDeviceGroupId}
                           onChange={(e) => {
                             setNewWidgetDeviceGroupId(e.target.value);
-                            const selectedGrp = deviceGroups.find(g => g.id === e.target.value) || 
-                                               JSON.parse(localStorage.getItem('device_groups') || '[]').find((g: any) => g.id === e.target.value);
-                            if (selectedGrp) {
-                              if (selectedGrp.deviceType === 'water_meter') {
-                                setNewWidgetMetric('flow');
-                                setNewWidgetUnit('L/h');
-                                setNewWidgetColor('teal');
-                              } else {
-                                setNewWidgetMetric('fillLevel');
-                                setNewWidgetUnit('%');
-                                setNewWidgetColor('amber');
-                              }
+                            const grp = deviceGroups.find(g => g.id === e.target.value) ||
+                              (JSON.parse(localStorage.getItem('device_groups') || '[]') as DeviceGroup[]).find(g => g.id === e.target.value);
+                            if (grp) {
+                              if (grp.deviceType === 'water_meter') { setNewWidgetMetric('flow'); setNewWidgetUnit('L/h'); setNewWidgetColor('teal'); }
+                              else { setNewWidgetMetric('fillLevel'); setNewWidgetUnit('%'); setNewWidgetColor('amber'); }
                             }
                           }}
+                          style={{ height: '42px' }}
                         >
                           <option value="">Selecciona un grupo...</option>
-                          {deviceGroups.filter(g => {
-                            const targetOrg = user?.role === 'superadmin' ? editDashOrgId || newDashOrgId || 'org1' : user?.organizationId || 'org1';
-                            return g.organizationId === targetOrg;
-                          }).map(g => (
+                          {filteredGroups.map(g => (
                             <option key={g.id} value={g.id}>
-                              {g.name} ({g.deviceType === 'water_meter' ? '💧 Medidores' : '🗑️ SmartBins'}) — {g.deviceEUIs.length} dispositivos
+                              {g.name} ({g.deviceType === 'water_meter' ? 'Medidores' : 'SmartBins'}) — {g.deviceEUIs.length} dispositivos
                             </option>
                           ))}
                         </select>
-                      ) : (
-                        /* Formulario inline para agregar grupo */
-                        <div style={{
-                          padding: 12,
-                          border: '1.5px dashed var(--teal)',
-                          borderRadius: 8,
-                          background: 'rgba(29, 158, 117, 0.04)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 10,
-                          marginTop: 6,
-                          animation: 'fadeIn 0.2s ease'
-                        }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--teal-dark)', borderBottom: '1.5px solid rgba(29, 158, 117, 0.15)', paddingBottom: 4 }}>
-                            Crear Conjunto / Grupo Inline
-                          </div>
-                          
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label className="form-label" style={{ fontSize: 11, marginBottom: 3, fontWeight: 600 }}>Nombre del Conjunto *</label>
-                            <input
-                              type="text"
-                              className="form-input"
-                              placeholder="Ej. Comparación Humedad Sector C"
-                              value={inlineGroupName}
-                              onChange={(e) => setInlineGroupName(e.target.value)}
-                              style={{ fontSize: 12, minHeight: 34, padding: '4px 8px' }}
-                            />
-                          </div>
-
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label className="form-label" style={{ fontSize: 11, marginBottom: 3, fontWeight: 600 }}>Tipo de Sensores</label>
-                            <select
-                              className="form-input"
-                              value={inlineGroupType}
-                              onChange={(e: any) => {
-                                setInlineGroupType(e.target.value);
-                                setInlineGroupSelectedDevices([]);
-                              }}
-                              style={{ fontSize: 12, minHeight: 34, padding: '4px 8px', backgroundPosition: 'calc(100% - 10px) 50%' }}
-                            >
-                              <option value="water_meter">💧 Medidores de Agua</option>
-                              <option value="smartbin">🗑️ SmartBins (Contenedores)</option>
-                            </select>
-                          </div>
-
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label className="form-label" style={{ fontSize: 11, marginBottom: 4, fontWeight: 600 }}>Selecciona los integrantes *</label>
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 4,
-                              maxHeight: 110,
-                              overflowY: 'auto',
-                              border: '1px solid var(--color-border)',
-                              borderRadius: 6,
-                              padding: 6,
-                              background: 'var(--color-bg)'
-                            }}>
-                              {filteredDevices.filter(d => d.deviceType === inlineGroupType).map(d => {
-                                const isSelected = inlineGroupSelectedDevices.includes(d.devEUI);
-                                return (
-                                  <label
-                                    key={d.devEUI}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      fontSize: 11,
-                                      padding: '4px 6px',
-                                      borderRadius: 4,
-                                      background: isSelected ? 'var(--teal-bg)' : 'transparent',
-                                      cursor: 'pointer',
-                                      userSelect: 'none'
-                                    }}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setInlineGroupSelectedDevices([...inlineGroupSelectedDevices, d.devEUI]);
-                                        } else {
-                                          setInlineGroupSelectedDevices(inlineGroupSelectedDevices.filter(id => id !== d.devEUI));
-                                        }
-                                      }}
-                                      style={{ accentColor: 'var(--teal)' }}
-                                    />
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontWeight: 550 }}>{d.name}</span>
-                                      <span style={{ fontSize: 8, color: 'var(--color-hint)' }}>{d.devEUI}</span>
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                              {filteredDevices.filter(d => d.deviceType === inlineGroupType).length === 0 && (
-                                <div style={{ fontSize: 10, color: 'var(--color-hint)', textAlign: 'center', padding: 8 }}>
-                                  No hay dispositivos disponibles de este tipo.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={() => setShowNewGroupForm(false)}
-                              style={{ padding: '2px 8px', fontSize: 11, height: 28, minWidth: 'auto' }}
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-primary"
-                              onClick={() => {
-                                if (!inlineGroupName.trim() || inlineGroupSelectedDevices.length === 0) {
-                                  alert('Ingresa el nombre del conjunto y elige al menos un sensor.');
-                                  return;
-                                }
-                                const newId = 'grp-' + Math.random().toString(36).substr(2, 9);
-                                const targetOrg = user?.role === 'superadmin' ? editDashOrgId || newDashOrgId || 'org1' : user?.organizationId || 'org1';
-                                
-                                const newGroup: DeviceGroup = {
-                                  id: newId,
-                                  name: inlineGroupName.trim(),
-                                  deviceType: inlineGroupType,
-                                  deviceEUIs: inlineGroupSelectedDevices,
-                                  organizationId: targetOrg,
-                                  createdAt: new Date().toISOString()
-                                };
-
-                                const saved = localStorage.getItem('device_groups');
-                                const allGroups: DeviceGroup[] = saved ? JSON.parse(saved) : [];
-                                const updatedGroups = [...allGroups, newGroup];
-                                localStorage.setItem('device_groups', JSON.stringify(updatedGroups));
-
-                                setDeviceGroups(updatedGroups);
-                                setNewWidgetDeviceGroupId(newId);
-                                
-                                // Asignar métricas por defecto
-                                if (inlineGroupType === 'water_meter') {
-                                  setNewWidgetMetric('flow');
-                                  setNewWidgetUnit('L/h');
-                                  setNewWidgetColor('teal');
-                                } else {
-                                  setNewWidgetMetric('fillLevel');
-                                  setNewWidgetUnit('%');
-                                  setNewWidgetColor('amber');
-                                }
-
-                                setShowNewGroupForm(false);
-                                setInlineGroupName('');
-                                setInlineGroupSelectedDevices([]);
-                              }}
-                              style={{ padding: '2px 10px', fontSize: 11, height: 28, background: 'var(--teal)', color: 'white', minWidth: 'auto' }}
-                            >
-                              Crear y Seleccionar
-                            </button>
-                          </div>
-                        </div>
                       )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* 4. SELECCIÓN DE COLUMNAS DE LA TABLA (SOLO TIPO TABLA) */}
+              {/* 4. CONFIGURACIÓN DE COLUMNAS (TABLA BITÁCORA) */}
               {newWidgetType === 'table' && (() => {
                 const selectedDeviceTelemetry = telemetryHistory[newWidgetDevice] || [];
                 const latestTelemetry = selectedDeviceTelemetry[0];
@@ -2050,12 +2757,8 @@ export default function DashboardPage() {
                   : [];
 
                 return (
-                  <div className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label className="form-label" style={{ fontWeight: 650, margin: 0 }}>
-                        4. Columnas de la Tabla a Mostrar *
-                      </label>
-                    </div>
+                  <div className="drawer-form-section">
+                    <div className="drawer-form-section-title">4. Columnas de la Tabla a Mostrar</div>
                     <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--color-muted)', lineHeight: '1.4' }}>
                       Gestiona, reordena y agrega las columnas dinámicas que deseas visualizar en la bitácora de este panel.
                     </p>
@@ -2347,7 +3050,7 @@ export default function DashboardPage() {
                     )}
 
                     {/* Botones de presets rápidos */}
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
                       <button
                         type="button"
                         className="btn-secondary"
@@ -2355,9 +3058,9 @@ export default function DashboardPage() {
                           const defaultWater = resolveTableColumns(undefined, 'water_meter');
                           setNewWidgetTableColumns(defaultWater);
                         }}
-                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 1 }}
+                        style={{ padding: '6px 12px', fontSize: '12px', height: '36px', minWidth: 'auto', flex: 1 }}
                       >
-                        Preset Medidor💧
+                        Preset Medidor
                       </button>
                       <button
                         type="button"
@@ -2366,30 +3069,31 @@ export default function DashboardPage() {
                           const defaultBin = resolveTableColumns(undefined, 'smartbin');
                           setNewWidgetTableColumns(defaultBin);
                         }}
-                        style={{ padding: '2px 8px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 1 }}
+                        style={{ padding: '6px 12px', fontSize: '12px', height: '36px', minWidth: 'auto', flex: 1 }}
                       >
-                        Preset SmartBin🗑️
+                        Preset SmartBin
                       </button>
                       <button
                         type="button"
                         className="btn-secondary"
                         onClick={() => setNewWidgetTableColumns([])}
-                        style={{ padding: '2px 4px', fontSize: '11px', height: '24px', minWidth: 'auto', flex: 0.5 }}
+                        style={{ padding: '6px 12px', fontSize: '12px', height: '36px', minWidth: 'auto', flex: 0.5 }}
                       >
-                        Limpiar🧹
+                        Limpiar
                       </button>
                     </div>
                   </div>
                 );
               })()}
 
-              {/* 4. SELECCIÓN DE DISPOSITIVOS MULTIPLE (MAPA O BARRAS) */}
+              {/* 5. SELECCIÓN DE DISPOSITIVOS MÚLTIPLES */}
               {(newWidgetType === 'map' || newWidgetType === 'bar') && (
-                <div className="form-group">
+                <div className="drawer-form-section">
+                  <div className="drawer-form-section-title">3. Dispositivos IoT a Mostrar</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
-                      3. Dispositivos IoT a Mostrar *
-                    </label>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-muted)' }}>
+                      Marca los dispositivos que quieras ver. Si no seleccionas ninguno, se mostrarán todos por defecto.
+                    </p>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
                         type="button"
@@ -2409,9 +3113,6 @@ export default function DashboardPage() {
                       </button>
                     </div>
                   </div>
-                  <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--color-muted)' }}>
-                    Marca los dispositivos que quieras ver. Si no seleccionas ninguno, se mostrarán todos por defecto.
-                  </p>
                   
                   <div style={{
                     display: 'grid',
@@ -2472,74 +3173,99 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 5. MÉTRICAS Y UNIDADES (KPI, LÍNEA, BARRAS) */}
-              {(newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar') && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Métrica de Telemetría</label>
+              {/* 6. MÉTRICAS Y ASPECTO VISUAL */}
+              <div className="drawer-form-section">
+                <div className="drawer-form-section-title">4. Configuración Visual y Métricas</div>
+                
+                {(newWidgetType === 'kpi' || newWidgetType === 'line' || newWidgetType === 'bar') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '10px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Métrica de Telemetría</label>
+                      <select 
+                        className="form-input" 
+                        value={newWidgetMetric} 
+                        onChange={(e) => {
+                          setNewWidgetMetric(e.target.value);
+                          if (e.target.value === 'flow') setNewWidgetUnit('L/h');
+                          else if (e.target.value === 'fillLevel') setNewWidgetUnit('%');
+                          else if (e.target.value === 'temperature') setNewWidgetUnit('°C');
+                          else if (e.target.value === 'level') setNewWidgetUnit('cm');
+                          else if (e.target.value === 'battery') setNewWidgetUnit('%');
+                        }}
+                        style={{ height: '42px' }}
+                      >
+                        <option value="flow">Caudal en Tiempo Real (flow)</option>
+                        <option value="level">Nivel de Agua (level)</option>
+                        <option value="fillLevel">Porcentaje de Llenado (fillLevel)</option>
+                        <option value="temperature">Temperatura Sensor (temperature)</option>
+                        <option value="battery">Nivel de Batería (battery)</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Unidad de Medida</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Ej. L/h, %, °C, cm" 
+                        value={newWidgetUnit} 
+                        onChange={(e) => setNewWidgetUnit(e.target.value)}
+                        style={{ height: '42px' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Ancho en Cuadrícula</label>
                     <select 
                       className="form-input" 
-                      value={newWidgetMetric} 
-                      onChange={(e) => {
-                        setNewWidgetMetric(e.target.value);
-                        if (e.target.value === 'flow') setNewWidgetUnit('L/h');
-                        else if (e.target.value === 'fillLevel') setNewWidgetUnit('%');
-                        else if (e.target.value === 'temperature') setNewWidgetUnit('°C');
-                        else if (e.target.value === 'level') setNewWidgetUnit('cm');
-                        else if (e.target.value === 'battery') setNewWidgetUnit('%');
-                      }}
+                      value={newWidgetWidth} 
+                      onChange={(e: any) => setNewWidgetWidth(e.target.value)}
+                      disabled={newWidgetType === 'map' || newWidgetType === 'table'}
+                      style={{ height: '42px' }}
                     >
-                      <option value="flow">💧 Caudal en Tiempo Real (flow)</option>
-                      <option value="level">🌊 Nivel de Agua (level)</option>
-                      <option value="fillLevel">🗑️ Porcentaje de Llenado (fillLevel)</option>
-                      <option value="temperature">🌡️ Temperatura Sensor (temperature)</option>
-                      <option value="battery">🔋 Nivel de Batería (battery)</option>
+                      <option value="third">1/3 Ancho (Pequeño)</option>
+                      <option value="half">1/2 Ancho (Mediano)</option>
+                      <option value="two-thirds">2/3 Ancho (Grande)</option>
+                      <option value="full">100% Ancho (Fila Completa)</option>
                     </select>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Unidad de Medida</label>
-                    <input 
-                      type="text" 
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Largo (Altura)</label>
+                    <select 
                       className="form-input" 
-                      placeholder="Ej. L/h, %, °C, cm" 
-                      value={newWidgetUnit} 
-                      onChange={(e) => setNewWidgetUnit(e.target.value)}
-                    />
+                      value={newWidgetHeight} 
+                      onChange={(e: any) => setNewWidgetHeight(e.target.value)}
+                      disabled={newWidgetType === 'kpi'}
+                      style={{ height: '42px' }}
+                    >
+                      <option value="short">Corto (220px)</option>
+                      <option value="medium">Mediano (340px)</option>
+                      <option value="tall">Alto (460px)</option>
+                      <option value="extra-tall">Extra Alto (580px)</option>
+                    </select>
                   </div>
                 </div>
-              )}
 
-              {/* 6. ANCHO DE GRID Y COLOR TEMÁTICO */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Ancho en Cuadrícula</label>
-                  <select 
-                    className="form-input" 
-                    value={newWidgetWidth} 
-                    onChange={(e: any) => setNewWidgetWidth(e.target.value)}
-                    disabled={newWidgetType === 'map' || newWidgetType === 'table'}
-                  >
-                    <option value="third">1/3 Ancho (Pequeño)</option>
-                    <option value="half">1/2 Ancho (Mediano)</option>
-                    <option value="two-thirds">2/3 Ancho (Grande)</option>
-                    <option value="full">100% Ancho (Fila Completa)</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Color de Acento</label>
-                  <select 
-                    className="form-input" 
-                    value={newWidgetColor} 
-                    onChange={(e: any) => setNewWidgetColor(e.target.value)}
-                  >
-                    <option value="teal">🟢 Verde Esmeralda (Teal)</option>
-                    <option value="blue">🔵 Azul Océano (Blue)</option>
-                    <option value="amber">🟠 Naranja Ámbar (Amber)</option>
-                    <option value="purple">🟣 Púrpura Profundo (Purple)</option>
-                    <option value="red">🔴 Rojo Alerta (Red)</option>
-                    <option value="gray">⚫ Gris Neutro (Gray)</option>
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '6px' }}>Color de Acento</label>
+                    <select 
+                      className="form-input" 
+                      value={newWidgetColor} 
+                      onChange={(e: any) => setNewWidgetColor(e.target.value)}
+                      style={{ height: '42px' }}
+                    >
+                      <option value="teal">Verde Esmeralda (Teal)</option>
+                      <option value="blue">Azul Océano (Blue)</option>
+                      <option value="amber">Naranja Ámbar (Amber)</option>
+                      <option value="purple">Púrpura Profundo (Purple)</option>
+                      <option value="red">Rojo Alerta (Red)</option>
+                      <option value="gray">Gris Neutro (Gray)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -2554,35 +3280,121 @@ export default function DashboardPage() {
               >
                 Cancelar
               </button>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={handleSaveWidget} 
-                disabled={
-                  !newWidgetTitle.trim() || 
-                  (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
-                    (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
-                  )
-                }
-                style={{ 
-                  opacity: (
-                    !newWidgetTitle.trim() || 
-                    (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
-                      (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
-                    )
-                  ) ? 0.6 : 1,
-                  cursor: (
-                    !newWidgetTitle.trim() || 
-                    (newWidgetType !== 'bar' && newWidgetType !== 'map' && 
-                      (newWidgetSourceType === 'single' ? !newWidgetDevice : !newWidgetDeviceGroupId)
-                    )
-                  ) ? 'not-allowed' : 'pointer'
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSaveWidget}
+                disabled={(() => {
+                  if (!newWidgetTitle.trim()) return true;
+                  if (newWidgetType === 'bar' || newWidgetType === 'map') return false;
+                  if (newWidgetSourceType === 'single') return !newWidgetDevice;
+                  if (newWidgetSourceType === 'multi') return newWidgetSelectedDevices.length < 2;
+                  return !newWidgetDeviceGroupId; // group
+                })()}
+                style={{
+                  opacity: (() => {
+                    if (!newWidgetTitle.trim()) return 0.6;
+                    if (newWidgetType === 'bar' || newWidgetType === 'map') return 1;
+                    if (newWidgetSourceType === 'single') return newWidgetDevice ? 1 : 0.6;
+                    if (newWidgetSourceType === 'multi') return newWidgetSelectedDevices.length >= 2 ? 1 : 0.6;
+                    return newWidgetDeviceGroupId ? 1 : 0.6;
+                  })(),
+                  cursor: (() => {
+                    if (!newWidgetTitle.trim()) return 'not-allowed';
+                    if (newWidgetType === 'bar' || newWidgetType === 'map') return 'pointer';
+                    if (newWidgetSourceType === 'single') return newWidgetDevice ? 'pointer' : 'not-allowed';
+                    if (newWidgetSourceType === 'multi') return newWidgetSelectedDevices.length >= 2 ? 'pointer' : 'not-allowed';
+                    return newWidgetDeviceGroupId ? 'pointer' : 'not-allowed';
+                  })()
                 }}
               >
                 {drawerMode === 'add' ? 'Agregar Panel' : 'Guardar Cambios'}
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* DRAWER DESLIZANTE: CREAR / EDITAR GRUPO DE DISPOSITIVOS */}
+      {isGroupDrawerOpen && (
+        <div className="slide-over-overlay" onClick={() => { setIsGroupDrawerOpen(false); setGroupDrawerMode(null); setEditingGroup(null); }}>
+          <div className="slide-over-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                  {groupDrawerMode === 'add' ? 'Crear Grupo de Dispositivos' : 'Editar Grupo'}
+                </h3>
+                <p style={{ margin: 0, marginTop: 2, fontSize: 12, color: 'var(--color-muted)' }}>
+                  Agrupa sensores del mismo tipo para compararlos en paneles de línea o tabla.
+                </p>
+              </div>
+              <button className="btn-secondary" onClick={() => { setIsGroupDrawerOpen(false); setGroupDrawerMode(null); setEditingGroup(null); }} style={{ padding: 6, minWidth: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="drawer-body">
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 600 }}>Nombre del Grupo *</label>
+                <input type="text" className="form-input" placeholder="Ej. Medidores Sector Norte" value={groupName} onChange={(e) => setGroupName(e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 600 }}>Tipo de Dispositivos</label>
+                <select className="form-input" value={groupType} onChange={(e: any) => { setGroupType(e.target.value); setGroupSelectedDevices([]); }}>
+                  <option value="water_meter">Medidores de Agua</option>
+                  <option value="smartbin">SmartBins (Contenedores)</option>
+                </select>
+              </div>
+
+              {user?.role === 'superadmin' && (
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Tenant / Cliente</label>
+                  <select className="form-input" value={groupOrgId} onChange={(e) => setGroupOrgId(e.target.value)}>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>Dispositivos del Grupo *</label>
+                  <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{groupSelectedDevices.length} seleccionados</span>
+                </div>
+                <input type="text" className="form-input" placeholder="Buscar dispositivo..." value={groupDeviceSearch} onChange={(e) => setGroupDeviceSearch(e.target.value)} style={{ marginBottom: 8 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 8, padding: 8, background: 'var(--color-bg)' }}>
+                  {groupFilteredDevices.map(d => {
+                    const isSel = groupSelectedDevices.includes(d.devEUI);
+                    return (
+                      <label key={d.devEUI} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '6px 8px', borderRadius: 6, background: isSel ? 'var(--teal-bg)' : 'transparent', cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox" checked={isSel} style={{ accentColor: 'var(--teal)' }}
+                          onChange={(e) => {
+                            if (e.target.checked) setGroupSelectedDevices([...groupSelectedDevices, d.devEUI]);
+                            else setGroupSelectedDevices(groupSelectedDevices.filter(id => id !== d.devEUI));
+                          }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <span style={{ fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</span>
+                          <span style={{ fontSize: 10, color: 'var(--color-hint)', fontFamily: 'monospace' }}>{d.devEUI}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                  {groupFilteredDevices.length === 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--color-hint)', textAlign: 'center', padding: 16 }}>
+                      {groupAvailableDevices.length === 0 ? 'No hay dispositivos de este tipo asignados.' : 'Sin resultados para la búsqueda.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="drawer-footer">
+              <button className="btn-secondary" onClick={() => { setIsGroupDrawerOpen(false); setGroupDrawerMode(null); setEditingGroup(null); }}>Cancelar</button>
+              <button className="btn-primary" onClick={handleSaveGroup} disabled={!groupName.trim() || groupSelectedDevices.length === 0}>
+                {groupDrawerMode === 'add' ? 'Crear Grupo' : 'Guardar Cambios'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2607,6 +3419,13 @@ export default function DashboardPage() {
             animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {activeToast.severity === 'critical' || activeToast.severity === 'warning' ? (
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            )}
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{activeToast.title}</div>
             <div style={{ fontSize: 11, marginTop: 2, opacity: 0.95, lineHeight: 1.4 }}>{activeToast.message}</div>

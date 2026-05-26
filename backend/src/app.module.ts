@@ -4,10 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Device } from './devices/device.entity';
 import { TelemetryRecord } from './telemetry/telemetry.entity';
 import { Integration } from './integration/integration.entity';
+import { User } from './users/user.entity';
+import { Organization } from './organization/organization.entity';
 import { DevicesModule } from './devices/devices.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { IntegrationModule } from './integration/integration.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -25,7 +28,7 @@ import { IntegrationModule } from './integration/integration.module';
         username: config.get<string>('DB_USER', 'appuser'),
         password: config.get<string>('DB_PASS', 'apppass123'),
         database: config.get<string>('DB_NAME', 'lorawan_app'),
-        entities: [Device, TelemetryRecord, Integration],
+        entities: [Device, TelemetryRecord, Integration, User, Organization],
         // synchronize:true crea las tablas automáticamente en desarrollo
         // Cámbialo a false en producción y usa migraciones
         synchronize: true,
@@ -37,6 +40,7 @@ import { IntegrationModule } from './integration/integration.module';
     TelemetryModule,
     WebhookModule,
     IntegrationModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

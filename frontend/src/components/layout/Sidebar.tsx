@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Map, Bell, Settings, LogOut, Radio, Cpu, X, Building, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_ALERTS } from '../../services/mockData';
+import { getAlerts } from '../../services/alertsEngine';
 
 const baseNavItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -19,7 +20,25 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const unacknowledged = MOCK_ALERTS.filter((a) => !a.acknowledged).length;
+  const [unacknowledged, setUnacknowledged] = useState(0);
+
+  useEffect(() => {
+    const updateCount = () => {
+      const activeAlerts = getAlerts(user?.role !== 'superadmin' ? user?.organizationId : undefined);
+      const count = activeAlerts.filter(a => !a.acknowledged).length;
+      setUnacknowledged(count);
+    };
+
+    updateCount();
+
+    window.addEventListener('alerts-changed', updateCount);
+    window.addEventListener('storage', updateCount);
+
+    return () => {
+      window.removeEventListener('alerts-changed', updateCount);
+      window.removeEventListener('storage', updateCount);
+    };
+  }, [user]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -30,7 +49,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   };
 
   const navItems = [...baseNavItems];
-  if (user?.role === 'superadmin') {
+  if (user?.role === 'superadmin' || user?.role === 'admin') {
     navItems.push(
       { to: '/clients', icon: Building, label: 'Clientes (Tenants)' },
       { to: '/users', icon: Users, label: 'Usuarios' }

@@ -29,7 +29,9 @@ const MOCK_COORDS: Record<string, { lat: number; lng: number; deviceType: 'water
   'AA01020304050607': { lat: -0.1807, lng: -78.4678, deviceType: 'water_meter' },
   'AA02030405060708': { lat: -0.2105, lng: -78.4892, deviceType: 'water_meter' },
   'BB01020304050607': { lat: -0.1950, lng: -78.5012, deviceType: 'smartbin' },
+  'BC01020304050607': { lat: -0.1950, lng: -78.5012, deviceType: 'smartbin' },
   'BB02030405060708': { lat: -0.1720, lng: -78.4780, deviceType: 'smartbin' },
+  'BC02030405060708': { lat: -0.1720, lng: -78.4780, deviceType: 'smartbin' },
   'AA03040506070809': { lat: -0.2310, lng: -78.5150, deviceType: 'water_meter' },
 };
 
@@ -37,7 +39,14 @@ const MOCK_COORDS: Record<string, { lat: number; lng: number; deviceType: 'water
 export const guessDeviceType = (devEUI: string, name?: string): 'water_meter' | 'smartbin' | 'unknown' => {
   if (MOCK_COORDS[devEUI]) return MOCK_COORDS[devEUI].deviceType;
   const lowerName = (name || '').toLowerCase();
-  if (lowerName.includes('bin') || devEUI.startsWith('BB')) return 'smartbin';
+  if (
+    lowerName.includes('bin') ||
+    devEUI.startsWith('BB') ||
+    devEUI.startsWith('BC') ||
+    lowerName.includes('moko') ||
+    lowerName.includes('milesight')
+  )
+    return 'smartbin';
   if (lowerName.includes('meter') || lowerName.includes('medidor') || devEUI.startsWith('AA')) return 'water_meter';
   return 'unknown';
 };
@@ -57,7 +66,7 @@ export const guessCoordinates = (devEUI: string, index = 0): { lat: number; lng:
 // Integrations
 export const getIntegrations = () => api.get('/integrations').then((r) => r.data);
 export const getIntegration = (id: string) => api.get(`/integrations/${id}`).then((r) => r.data);
-export const createIntegration = (data: { name: string; description?: string; preset?: string }) =>
+export const createIntegration = (data: { name: string; description?: string; preset?: string; organizationId?: string }) =>
   api.post('/integrations', data).then((r) => r.data);
 export const updateIntegration = (id: string, data: any) =>
   api.patch(`/integrations/${id}`, data).then((r) => r.data);
@@ -109,13 +118,45 @@ export const getDevices = async (integrationId?: string): Promise<Device[]> => {
         }
 
         const devType = d.deviceType || guessDeviceType(d.devEUI, d.name);
-        const coords = guessCoordinates(d.devEUI, index);
+        
+        let staticLat = d.lat;
+        let staticLng = d.lng;
+        let staticParams: any = {};
+
+        try {
+          const storedParams = localStorage.getItem('device_static_parameters');
+          if (storedParams) {
+            const parsed = JSON.parse(storedParams);
+            if (parsed && parsed[d.devEUI]) {
+              staticParams = parsed[d.devEUI];
+              if (staticParams.lat !== undefined && staticParams.lat !== null) {
+                staticLat = Number(staticParams.lat);
+              }
+              if (staticParams.lng !== undefined && staticParams.lng !== null) {
+                staticLng = Number(staticParams.lng);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error reading device_static_parameters', e);
+        }
+
+        if (staticLat === undefined || staticLat === null || staticLng === undefined || staticLng === null) {
+          const coords = guessCoordinates(d.devEUI, index);
+          staticLat = coords.lat;
+          staticLng = coords.lng;
+        }
+
+        // Allow custom alias/label overriding device name if provided
+        const displayName = staticParams.customAlias || d.name || `Dispositivo ${d.devEUI.substring(0, 6)}`;
 
         return {
           ...d,
+          name: displayName,
           deviceType: devType,
-          lat: coords.lat,
-          lng: coords.lng,
+          lat: staticLat,
+          lng: staticLng,
+          staticParams,
           lastTelemetry,
         } as Device;
       })

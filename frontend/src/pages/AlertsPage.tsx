@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Bell, CheckCheck, Plus, Eye, Edit2, Trash2, X, 
-  Sliders, ShieldAlert, ToggleLeft, ToggleRight, Info, AlertTriangle, Play
+  Bell, CheckCheck, Plus, Edit2, Trash2, 
+  Sliders, ShieldAlert, ToggleLeft, ToggleRight, Info, AlertTriangle, Target
 } from 'lucide-react';
 import AlertItem from '../components/alerts/AlertItem';
 import { MOCK_ALERTS, MOCK_DEVICES } from '../services/mockData';
@@ -21,7 +21,6 @@ export default function AlertsPage() {
   // States for alerts history
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filter, setFilter] = useState<'all' | 'active' | 'acknowledged'>('active');
-  const [mappings, setMappings] = useState<Record<string, string>>({});
 
   // States for alert rules
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -57,25 +56,16 @@ export default function AlertsPage() {
       })
       .catch(() => {});
 
-    // 2. Mappings
-    const storedMappings = localStorage.getItem('device_organization_mappings');
-    if (storedMappings) {
-      setMappings(JSON.parse(storedMappings));
-    }
+    // 2. Mappings removed (using database device.organizationId)
 
     // 3. Device Groups
     const storedGroups = localStorage.getItem('device_groups');
     if (storedGroups) {
-      setDeviceGroups(JSON.parse(storedGroups));
-    }
-
-    // 4. Alerts
-    const storedAlerts = getAlerts();
-    if (storedAlerts.length === 0) {
-      saveAlerts(MOCK_ALERTS);
-      setAlerts(MOCK_ALERTS);
-    } else {
-      setAlerts(storedAlerts);
+      try {
+        setDeviceGroups(JSON.parse(storedGroups));
+      } catch (e) {
+        console.error('Error parseando device_groups en AlertsPage', e);
+      }
     }
 
     // 5. Rules
@@ -83,6 +73,29 @@ export default function AlertsPage() {
     setRules(getAlertRules());
     setRuleOrgId(currentOrg);
   }, [user]);
+
+  // Load and subscribe to alerts
+  useEffect(() => {
+    const loadAlerts = () => {
+      const storedAlerts = getAlerts();
+      if (storedAlerts.length === 0) {
+        saveAlerts(MOCK_ALERTS);
+        setAlerts(MOCK_ALERTS);
+      } else {
+        setAlerts(storedAlerts);
+      }
+    };
+
+    loadAlerts();
+
+    window.addEventListener('alerts-changed', loadAlerts);
+    window.addEventListener('storage', loadAlerts);
+
+    return () => {
+      window.removeEventListener('alerts-changed', loadAlerts);
+      window.removeEventListener('storage', loadAlerts);
+    };
+  }, []);
 
   // Acknowledge alert
   const acknowledge = (id: string) => {
@@ -108,7 +121,8 @@ export default function AlertsPage() {
   // Filter alerts by multi-tenant mapping
   const tenantAlerts = alerts.filter((a) => {
     if (user?.role !== 'superadmin') {
-      const deviceOrg = mappings[a.devEUI] || 'org1';
+      const device = devices.find(d => d.devEUI === a.devEUI);
+      const deviceOrg = device?.organizationId || 'org1';
       if (deviceOrg !== user?.organizationId) {
         return false;
       }
@@ -125,7 +139,6 @@ export default function AlertsPage() {
   const activeCount = tenantAlerts.filter((a) => !a.acknowledged).length;
 
   // Filter rules by organization if not superadmin
-  const targetOrgId = user?.role === 'superadmin' ? ruleOrgId : user?.organizationId || 'org1';
   const tenantRules = rules.filter(r => {
     if (user?.role !== 'superadmin') {
       return r.organizationId === user?.organizationId;
@@ -186,12 +199,12 @@ export default function AlertsPage() {
   // Metric options helper
   const getMetricLabel = (key: string) => {
     const labels: Record<string, string> = {
-      flow: '🌊 Caudal (L/h)',
-      level: '💧 Nivel (cm)',
-      fillLevel: '🗑️ Llenado (%)',
-      temperature: '🌡️ Temperatura (°C)',
-      battery: '🔋 Batería (%)',
-      pressure: '🎈 Presión (bar)'
+      flow: 'Caudal (L/h)',
+      level: 'Nivel (cm)',
+      fillLevel: 'Llenado (%)',
+      temperature: 'Temperatura (°C)',
+      battery: 'Batería (%)',
+      pressure: 'Presión (bar)'
     };
     return labels[key] || key;
   };
@@ -395,14 +408,17 @@ export default function AlertsPage() {
                     color: 'var(--color-text)'
                   }}>
                     <strong style={{ color: 'var(--teal)' }}>Regla:</strong> {getMetricLabel(rule.metricKey)} {rule.operator} {rule.thresholdValue}
-                    <div style={{ marginTop: 4, fontSize: 10, color: 'var(--color-hint)' }}>
-                      🔑 Aplica a:{' '}
-                      {rule.applyToAll 
-                        ? `Todos los ${rule.deviceType === 'water_meter' ? 'Medidores' : 'Contenedores'}` 
-                        : rule.deviceGroupId 
-                          ? `Grupo: ${ruleGroup?.name || rule.deviceGroupId}` 
-                          : `Sensor: ${ruleDevice?.name || rule.deviceEUI}`
-                      }
+                    <div style={{ marginTop: 4, fontSize: 10, color: 'var(--color-hint)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Target size={11} style={{ color: 'var(--teal)' }} />
+                      <span>Aplica a:</span>{' '}
+                      <span>
+                        {rule.applyToAll 
+                          ? `Todos los ${rule.deviceType === 'water_meter' ? 'Medidores' : 'Contenedores'}` 
+                          : rule.deviceGroupId 
+                            ? `Grupo: ${ruleGroup?.name || rule.deviceGroupId}` 
+                            : `Sensor: ${ruleDevice?.name || rule.deviceEUI}`
+                        }
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -470,7 +486,7 @@ export default function AlertsPage() {
       {/* Slide-over Drawer for rules CRUD */}
       {isDrawerOpen && (
         <div className="slide-over-overlay" onClick={() => setIsDrawerOpen(false)}>
-          <div className="slide-over-drawer" onClick={(e) => e.stopPropagation()} style={{ width: '480px', maxWidth: '100%' }}>
+          <div className="slide-over-drawer wide-drawer" onClick={(e) => e.stopPropagation()} style={{ width: '680px', maxWidth: '100%' }}>
             <div className="drawer-header">
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
@@ -514,8 +530,8 @@ export default function AlertsPage() {
                     setRuleDeviceEUI('');
                   }}
                 >
-                  <option value="water_meter">💧 Medidores de Agua (Water Meters)</option>
-                  <option value="smartbin">🗑️ SmartBins (Contenedores)</option>
+                  <option value="water_meter">Medidores de Agua (Water Meters)</option>
+                  <option value="smartbin">SmartBins (Contenedores)</option>
                 </select>
               </div>
 
@@ -559,7 +575,7 @@ export default function AlertsPage() {
                     onChange={(e) => setRuleDeviceGroupId(e.target.value)}
                   >
                     <option value="">Selecciona un grupo...</option>
-                    {deviceGroups.filter(g => g.deviceType === ruleDeviceType && (user?.role === 'superadmin' ? g.organizationId === ruleOrgId : true)).map(g => (
+                    {deviceGroups.filter(g => g.deviceType === ruleDeviceType && (user?.role === 'superadmin' ? g.organizationId === ruleOrgId : g.organizationId === user?.organizationId)).map(g => (
                       <option key={g.id} value={g.id}>{g.name} ({g.deviceEUIs.length} dispositivos)</option>
                     ))}
                   </select>
@@ -576,7 +592,7 @@ export default function AlertsPage() {
                     onChange={(e) => setRuleDeviceEUI(e.target.value)}
                   >
                     <option value="">Selecciona un dispositivo...</option>
-                    {devices.filter(d => d.deviceType === ruleDeviceType && (user?.role === 'superadmin' ? mappings[d.devEUI] === ruleOrgId : true)).map(d => (
+                    {devices.filter(d => d.deviceType === ruleDeviceType && (user?.role === 'superadmin' ? (d.organizationId || 'org1') === ruleOrgId : (d.organizationId || 'org1') === user?.organizationId)).map(d => (
                       <option key={d.devEUI} value={d.devEUI}>{d.name} ({d.devEUI})</option>
                     ))}
                   </select>
@@ -593,17 +609,17 @@ export default function AlertsPage() {
                   >
                     {ruleDeviceType === 'water_meter' ? (
                       <>
-                        <option value="flow">🌊 Caudal (flow)</option>
-                        <option value="level">💧 Nivel (level)</option>
-                        <option value="temperature">🌡️ Temperatura (temperature)</option>
-                        <option value="battery">🔋 Batería (battery)</option>
-                        <option value="pressure">🎈 Presión (pressure)</option>
+                        <option value="flow">Caudal (flow)</option>
+                        <option value="level">Nivel (level)</option>
+                        <option value="temperature">Temperatura (temperature)</option>
+                        <option value="battery">Batería (battery)</option>
+                        <option value="pressure">Presión (pressure)</option>
                       </>
                     ) : (
                       <>
-                        <option value="fillLevel">🗑️ Nivel de Llenado (fillLevel)</option>
-                        <option value="temperature">🌡️ Temperatura (temperature)</option>
-                        <option value="battery">🔋 Batería (battery)</option>
+                        <option value="fillLevel">Nivel de Llenado (fillLevel)</option>
+                        <option value="temperature">Temperatura (temperature)</option>
+                        <option value="battery">Batería (battery)</option>
                       </>
                     )}
                   </select>

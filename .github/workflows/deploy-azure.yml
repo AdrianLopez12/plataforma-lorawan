@@ -1,0 +1,76 @@
+name: Deploy to Azure VM (CI/CD)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Permite disparar el despliegue manualmente desde la web de GitHub
+
+jobs:
+  verify-and-test:
+    name: Verificar y Compilar Código
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar Código 🛎️
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js v20 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-level: '20'
+          cache: 'npm'
+
+      - name: Validar Backend 💻
+        run: |
+          cd backend
+          npm install
+          npm run build
+
+      - name: Validar Frontend 🌐
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+  deploy-to-azure:
+    name: Desplegar en Azure VM
+    needs: verify-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ejecutar comandos de despliegue vía SSH 🚀
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          port: 22
+          script: |
+            echo "=== Conexión establecida con la VM de Azure ==="
+            cd /var/www/lorawan-app
+            
+            echo "1. Trayendo los últimos cambios de la rama main..."
+            git pull origin main
+            
+            echo "2. Asegurando estado de la Base de Datos (PostgreSQL)..."
+            sudo docker-compose -f docker-compose.prod.yml up -d
+            
+            echo "3. Actualizando y Recompilando el Backend (NestJS)..."
+            cd backend
+            npm install --omit=dev
+            npm run build
+            
+            echo "4. Reiniciando el Servidor Backend con PM2..."
+            pm2 restart lorawan-backend || pm2 start dist/src/main.js --name "lorawan-backend"
+            pm2 save
+            
+            echo "5. Actualizando y Recompilando el Portal Frontend (React)..."
+            cd ../frontend
+            npm install
+            npm run build
+            
+            echo "6. Recargando Nginx para reflejar los cambios estáticos..."
+            sudo systemctl reload nginx
+            
+            echo "=== ¡DESPLIEGUE CONTINUO FINALIZADO CON ÉXITO! ==="

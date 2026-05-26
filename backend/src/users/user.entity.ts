@@ -6,25 +6,25 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('integrations')
-export class Integration {
+@Entity('users')
+export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({ nullable: true })
-  description: string;
-
   @Column({ unique: true })
-  secret: string;
+  email: string;
 
-  @Column({ type: 'text', nullable: true })
-  decoderCode: string;
+  @Column()
+  password?: string; // encrypted with bcrypt
+
+  @Column()
+  role: string; // 'superadmin' | 'admin' | 'operator'
 
   @Column({ nullable: true })
-  organizationId: string;
+  organizationId?: string;
 
   @CreateDateColumn()
   createdAt: Date;

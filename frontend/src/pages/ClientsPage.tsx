@@ -5,9 +5,10 @@ import {
   Users, Radio, X 
 } from 'lucide-react';
 import type { Organization } from '../types';
+import { getDevices } from '../services/api';
 
 export default function ClientsPage() {
-  const { clients, addClient, updateClient, deleteClient, users } = useAuth();
+  const { clients, addClient, updateClient, deleteClient, users, user: activeSessionUser } = useAuth();
   
   const [search, setSearch] = useState('');
   
@@ -24,30 +25,21 @@ export default function ClientsPage() {
   const [deviceCounts, setDeviceCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    // Calcular dinámicamente dispositivos mapeados desde el almacenamiento local
-    const mappings = JSON.parse(localStorage.getItem('device_organization_mappings') || '{}');
-    const counts: Record<string, number> = {};
-    
-    // Contar también mapeos de dispositivos mock predeterminados si corresponde
-    // Inicializar contadores en 0
-    clients.forEach((c) => {
-      counts[c.id] = 0;
-    });
-
-    // Sumar mappings activos
-    Object.values(mappings).forEach((orgId: any) => {
-      if (counts[orgId] !== undefined) {
-        counts[orgId]++;
-      } else {
-        counts[orgId] = 1;
-      }
-    });
-
-    // MOCK_DEVICES por defecto: org1 tiene 3 y org2 tiene 1 por defecto
-    counts['org1'] = (counts['org1'] || 0) + 3;
-    counts['org2'] = (counts['org2'] || 0) + 1;
-
-    setDeviceCounts(counts);
+    getDevices()
+      .then((devicesList) => {
+        const counts: Record<string, number> = {};
+        clients.forEach((c) => {
+          counts[c.id] = 0;
+        });
+        devicesList.forEach((d) => {
+          const orgId = d.organizationId || 'org1';
+          counts[orgId] = (counts[orgId] || 0) + 1;
+        });
+        setDeviceCounts(counts);
+      })
+      .catch((err) => {
+        console.error("Error al cargar dispositivos en ClientsPage:", err);
+      });
   }, [clients]);
 
   // Contar usuarios por organización
@@ -59,7 +51,8 @@ export default function ClientsPage() {
     e.preventDefault();
     if (!clientName.trim()) return;
     
-    addClient(clientName, clientDesc);
+    const parentId = activeSessionUser?.role !== 'superadmin' ? activeSessionUser?.organizationId : undefined;
+    addClient(clientName, clientDesc, parentId);
     
     // Reset & Close
     setClientName('');
@@ -93,7 +86,20 @@ export default function ClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter((c) => 
+  const visibleClients = clients.filter((c) => {
+    if (activeSessionUser?.role === 'superadmin') return true;
+    return c.id === activeSessionUser?.organizationId || c.parentId === activeSessionUser?.organizationId;
+  });
+
+  const visibleClientIds = visibleClients.map(c => c.id);
+
+  const visibleUsersCount = users.filter(u => u.role !== 'superadmin' && visibleClientIds.includes(u.organizationId || '')).length;
+
+  const visibleDevicesCount = Object.entries(deviceCounts)
+    .filter(([orgId]) => visibleClientIds.includes(orgId))
+    .reduce((sum, [_, count]) => sum + count, 0);
+
+  const filteredClients = visibleClients.filter((c) => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
     (c.description || '').toLowerCase().includes(search.toLowerCase())
   );
@@ -128,7 +134,7 @@ export default function ClientsPage() {
           </div>
           <div>
             <div className="stat-title">Clientes registrados</div>
-            <div className="stat-value">{clients.length}</div>
+            <div className="stat-value">{visibleClients.length}</div>
             <div className="stat-subtitle">Inquilinos en el sistema</div>
           </div>
         </div>
@@ -140,7 +146,7 @@ export default function ClientsPage() {
           <div>
             <div className="stat-title">Usuarios asociados</div>
             <div className="stat-value">
-              {users.filter(u => u.role !== 'superadmin').length}
+              {visibleUsersCount}
             </div>
             <div className="stat-subtitle">Administradores u Operadores</div>
           </div>
@@ -153,7 +159,7 @@ export default function ClientsPage() {
           <div>
             <div className="stat-title">Dispositivos cliente</div>
             <div className="stat-value">
-              {Object.values(deviceCounts).reduce((a, b) => a + b, 0)}
+              {visibleDevicesCount}
             </div>
             <div className="stat-subtitle">Mapeados a inquilinos</div>
           </div>
@@ -243,7 +249,7 @@ export default function ClientsPage() {
                       >
                         <Edit2 size={12} />
                       </button>
-                      {c.id !== 'org1' && (
+                      {c.id !== 'org1' && c.id !== activeSessionUser?.organizationId && (
                         <button 
                           onClick={() => handleDelete(c.id, c.name)}
                           className="ack-btn" 

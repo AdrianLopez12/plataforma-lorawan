@@ -7,12 +7,11 @@ import type { Device, WaterMeterPayload, TelemetryRecord } from '../types';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 
-const DEFAULT_DEVICE_MAPPINGS: Record<string, string> = {
-  'AA01020304050607': 'org1',
-  'AA02030405060708': 'org1',
-  'BB01020304050607': 'org1',
-  'BB02030405060708': 'org2',
-  'AA03040506070809': 'org2',
+
+const safeFormatNum = (val: any, decimals: number): string => {
+  if (val === null || val === undefined) return '—';
+  const num = Number(val);
+  return isNaN(num) ? '—' : num.toFixed(decimals);
 };
 
 export default function WaterMetersPage() {
@@ -21,19 +20,11 @@ export default function WaterMetersPage() {
   const [selected, setSelected] = useState<Device | null>(null);
   const [history, setHistory] = useState<TelemetryRecord[]>([]);
 
-  // Cargar mappings
-  const getMappings = (): Record<string, string> => {
-    const stored = localStorage.getItem('device_organization_mappings');
-    return stored ? JSON.parse(stored) : DEFAULT_DEVICE_MAPPINGS;
-  };
-
-  const mappings = getMappings();
-
   // Filtrar medidores por tipo y inquilino
   const waterDevices = devices.filter((d) => {
     if (d.deviceType !== 'water_meter') return false;
     if (user?.role !== 'superadmin') {
-      const deviceOrg = mappings[d.devEUI] || 'org1';
+      const deviceOrg = d.organizationId || 'org1';
       return deviceOrg === user?.organizationId;
     }
     return true;
@@ -49,7 +40,7 @@ export default function WaterMetersPage() {
           const water = data.filter((d) => {
             if (d.deviceType !== 'water_meter') return false;
             if (user?.role !== 'superadmin') {
-              const deviceOrg = mappings[d.devEUI] || 'org1';
+              const deviceOrg = d.organizationId || 'org1';
               return deviceOrg === user?.organizationId;
             }
             return true;
@@ -64,7 +55,7 @@ export default function WaterMetersPage() {
           const water = MOCK_DEVICES.filter((d) => {
             if (d.deviceType !== 'water_meter') return false;
             if (user?.role !== 'superadmin') {
-              const deviceOrg = mappings[d.devEUI] || 'org1';
+              const deviceOrg = d.organizationId || 'org1';
               return deviceOrg === user?.organizationId;
             }
             return true;
@@ -77,7 +68,7 @@ export default function WaterMetersPage() {
         const water = MOCK_DEVICES.filter((d) => {
           if (d.deviceType !== 'water_meter') return false;
           if (user?.role !== 'superadmin') {
-            const deviceOrg = mappings[d.devEUI] || 'org1';
+            const deviceOrg = d.organizationId || 'org1';
             return deviceOrg === user?.organizationId;
           }
           return true;
@@ -103,14 +94,26 @@ export default function WaterMetersPage() {
       });
   }, [selected]);
 
-  const chartData = history.map((h) => ({
-    time: format(new Date(h.receivedAt), 'HH:mm'),
-    caudal: Number(((h.decodedPayload as any).flow ?? 0).toFixed(2)),
-    nivel: Number(((h.decodedPayload as any).level ?? 0).toFixed(1)),
-    temp: Number(((h.decodedPayload as any).temperature ?? 0).toFixed(1)),
-  }));
+  const chartData = history.map((h) => {
+    const rawFlow = h.decodedPayload ? (h.decodedPayload as any).flow : null;
+    const rawLevel = h.decodedPayload ? (h.decodedPayload as any).level : null;
+    const rawTemp = h.decodedPayload ? (h.decodedPayload as any).temperature : null;
+    
+    const flowNum = rawFlow !== null && rawFlow !== undefined ? Number(rawFlow) : NaN;
+    const levelNum = rawLevel !== null && rawLevel !== undefined ? Number(rawLevel) : NaN;
+    const tempNum = rawTemp !== null && rawTemp !== undefined ? Number(rawTemp) : NaN;
 
-  const payload = selected?.lastTelemetry?.decodedPayload as WaterMeterPayload | undefined;
+    return {
+      time: format(new Date(h.receivedAt), 'HH:mm'),
+      caudal: !isNaN(flowNum) ? Number(flowNum.toFixed(2)) : 0,
+      nivel: !isNaN(levelNum) ? Number(levelNum.toFixed(1)) : 0,
+      temp: !isNaN(tempNum) ? Number(tempNum.toFixed(1)) : 0,
+    };
+  });
+
+  const latestTelemetry = history.length > 0 ? history[history.length - 1] : selected?.lastTelemetry;
+  const payload = latestTelemetry?.decodedPayload as WaterMeterPayload | undefined;
+
 
   if (!selected) {
     return (
@@ -156,8 +159,8 @@ export default function WaterMetersPage() {
                   </span>
                 </div>
                 <div className="device-card-stats">
-                  <span><Droplets size={12} /> {p?.flow?.toFixed(1) ?? '—'} L/h</span>
-                  <span><Thermometer size={12} /> {p?.temperature?.toFixed(1) ?? '—'}°C</span>
+                  <span><Droplets size={12} /> {safeFormatNum(p?.flow, 1)} L/h</span>
+                  <span><Thermometer size={12} /> {safeFormatNum(p?.temperature, 1)}°C</span>
                   <span><Battery size={12} /> {p?.battery ?? '—'}%</span>
                 </div>
                 <div className="device-card-eui">{d.devEUI}</div>
@@ -178,19 +181,19 @@ export default function WaterMetersPage() {
             <div className="metrics-grid">
               <div className="metric-box blue">
                 <div className="metric-label">Caudal</div>
-                <div className="metric-value">{payload?.flow?.toFixed(2) ?? '—'}<span className="metric-unit">L/h</span></div>
+                <div className="metric-value">{safeFormatNum(payload?.flow, 2)}<span className="metric-unit">L/h</span></div>
               </div>
               <div className="metric-box teal">
                 <div className="metric-label">Nivel</div>
-                <div className="metric-value">{payload?.level?.toFixed(0) ?? '—'}<span className="metric-unit">cm</span></div>
+                <div className="metric-value">{safeFormatNum(payload?.level, 0)}<span className="metric-unit">cm</span></div>
               </div>
               <div className="metric-box amber">
                 <div className="metric-label">Temperatura</div>
-                <div className="metric-value">{payload?.temperature?.toFixed(1) ?? '—'}<span className="metric-unit">°C</span></div>
+                <div className="metric-value">{safeFormatNum(payload?.temperature, 1)}<span className="metric-unit">°C</span></div>
               </div>
               <div className="metric-box purple">
                 <div className="metric-label">Consumo total</div>
-                <div className="metric-value">{payload?.totalConsumption?.toFixed(1) ?? '—'}<span className="metric-unit">m³</span></div>
+                <div className="metric-value">{safeFormatNum(payload?.totalConsumption, 1)}<span className="metric-unit">m³</span></div>
               </div>
             </div>
 

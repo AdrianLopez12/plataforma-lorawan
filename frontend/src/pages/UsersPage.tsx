@@ -31,18 +31,24 @@ export default function UsersPage() {
   const [generatedCreds, setGeneratedCreds] = useState({ email: '', pass: '', name: '' });
   const [copiedReceipt, setCopiedReceipt] = useState(false);
 
+  const visibleClients = clients.filter((c) => {
+    if (activeSessionUser?.role === 'superadmin') return true;
+    return c.id === activeSessionUser?.organizationId || c.parentId === activeSessionUser?.organizationId;
+  });
+  const visibleClientIds = visibleClients.map(c => c.id);
+
   // Rellenar automáticamente la primera organización si está vacía
   useEffect(() => {
-    if (clients.length > 0 && !userOrgId) {
-      setUserOrgId(clients[0].id);
+    if (visibleClients.length > 0 && !userOrgId) {
+      setUserOrgId(visibleClients[0].id);
     }
-  }, [clients]);
+  }, [visibleClients]);
 
   const handleCreateClick = () => {
     setUserName('');
     setUserEmail('');
     setUserRole('operator');
-    if (clients.length > 0) setUserOrgId(clients[0].id);
+    if (visibleClients.length > 0) setUserOrgId(visibleClients[0].id);
     setShowCreateModal(true);
   };
 
@@ -93,7 +99,7 @@ export default function UsersPage() {
     setUserName(u.name);
     setUserEmail(u.email);
     setUserRole(u.role);
-    setUserOrgId(u.organizationId || (clients.length > 0 ? clients[0].id : ''));
+    setUserOrgId(u.organizationId || (visibleClients.length > 0 ? visibleClients[0].id : ''));
     setShowEditModal(true);
   };
 
@@ -154,7 +160,12 @@ export default function UsersPage() {
     return found ? found.name : 'Cliente Desconocido';
   };
 
-  const filteredUsers = users.filter((u) => 
+  const visibleUsers = users.filter((u) => {
+    if (activeSessionUser?.role === 'superadmin') return true;
+    return u.organizationId !== undefined && visibleClientIds.includes(u.organizationId);
+  });
+
+  const filteredUsers = visibleUsers.filter((u) => 
     u.name.toLowerCase().includes(search.toLowerCase()) || 
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.role.toLowerCase().includes(search.toLowerCase())
@@ -186,7 +197,7 @@ export default function UsersPage() {
           </div>
           <div>
             <div className="stat-title">Usuarios Totales</div>
-            <div className="stat-value">{users.length}</div>
+            <div className="stat-value">{visibleUsers.length}</div>
             <div className="stat-subtitle">Cuentas creadas en total</div>
           </div>
         </div>
@@ -197,7 +208,7 @@ export default function UsersPage() {
           </div>
           <div>
             <div className="stat-title">Super Admins</div>
-            <div className="stat-value">{users.filter(u => u.role === 'superadmin').length}</div>
+            <div className="stat-value">{visibleUsers.filter(u => u.role === 'superadmin').length}</div>
             <div className="stat-subtitle">Acceso total a la plataforma</div>
           </div>
         </div>
@@ -208,7 +219,7 @@ export default function UsersPage() {
           </div>
           <div>
             <div className="stat-title">Administradores</div>
-            <div className="stat-value">{users.filter(u => u.role === 'admin').length}</div>
+            <div className="stat-value">{visibleUsers.filter(u => u.role === 'admin').length}</div>
             <div className="stat-subtitle">Gestores de su organización</div>
           </div>
         </div>
@@ -219,7 +230,7 @@ export default function UsersPage() {
           </div>
           <div>
             <div className="stat-title">Operadores</div>
-            <div className="stat-value">{users.filter(u => u.role === 'operator').length}</div>
+            <div className="stat-value">{visibleUsers.filter(u => u.role === 'operator').length}</div>
             <div className="stat-subtitle">Solo lectura y dashboards</div>
           </div>
         </div>
@@ -376,7 +387,9 @@ export default function UsersPage() {
                   >
                     <option value="operator">Operador (Visualización)</option>
                     <option value="admin">Administrador (Gestión Inquilino)</option>
-                    <option value="superadmin">Super Administrador (Acceso Global)</option>
+                    {activeSessionUser?.role === 'superadmin' && (
+                      <option value="superadmin">Super Administrador (Acceso Global)</option>
+                    )}
                   </select>
                 </div>
 
@@ -389,7 +402,7 @@ export default function UsersPage() {
                       onChange={(e) => setUserOrgId(e.target.value)}
                       required
                     >
-                      {clients.map(c => (
+                      {visibleClients.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
@@ -473,7 +486,9 @@ export default function UsersPage() {
                   >
                     <option value="operator">Operador (Visualización)</option>
                     <option value="admin">Administrador (Gestión Inquilino)</option>
-                    <option value="superadmin">Super Administrador (Acceso Global)</option>
+                    {activeSessionUser?.role === 'superadmin' && (
+                      <option value="superadmin">Super Administrador (Acceso Global)</option>
+                    )}
                   </select>
                 </div>
 
@@ -486,7 +501,7 @@ export default function UsersPage() {
                       onChange={(e) => setUserOrgId(e.target.value)}
                       required
                     >
-                      {clients.map(c => (
+                      {visibleClients.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>

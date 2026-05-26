@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
-import { Menu } from 'lucide-react';
+import { Menu, Zap } from 'lucide-react';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -43,7 +43,7 @@ export default function AppLayout() {
           <Menu size={24} />
         </button>
         <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.015em', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: 'var(--teal)' }}>⚡</span> LoRaWAN AS
+          <Zap size={16} style={{ color: 'var(--teal)', fill: 'var(--teal-bg)' }} /> LoRaWAN AS
         </span>
         <div style={{ width: 40 }} /> {/* Horizontal balancer spacing */}
       </header>

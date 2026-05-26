@@ -68,7 +68,12 @@ const DEFAULT_RULES: AlertRule[] = [
 
 export function getAlertRules(organizationId?: string): AlertRule[] {
   const saved = localStorage.getItem(STORAGE_KEYS.RULES);
-  let rules: AlertRule[] = saved ? JSON.parse(saved) : [];
+  let rules: AlertRule[] = [];
+  try {
+    rules = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error('Error parseando reglas de localStorage', e);
+  }
   
   if (rules.length === 0) {
     localStorage.setItem(STORAGE_KEYS.RULES, JSON.stringify(DEFAULT_RULES));
@@ -87,12 +92,22 @@ export function saveAlertRules(rules: AlertRule[]): void {
 
 export function getAlerts(organizationId?: string): Alert[] {
   const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
-  const alerts: Alert[] = saved ? JSON.parse(saved) : [];
+  let alerts: Alert[] = [];
+  try {
+    alerts = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error('Error parseando alertas de localStorage', e);
+  }
   
   if (organizationId) {
     // Para filtrar las alertas en base a los mapeos de inquilino de cada dispositivo
     const mappingsStr = localStorage.getItem('device_organization_mappings') || '{}';
-    const mappings = JSON.parse(mappingsStr);
+    let mappings: Record<string, string> = {};
+    try {
+      mappings = JSON.parse(mappingsStr);
+    } catch (e) {
+      console.error('Error parseando mappings de localStorage', e);
+    }
     
     return alerts.filter(a => {
       const deviceOrg = mappings[a.devEUI] || 'org1';
@@ -104,6 +119,7 @@ export function getAlerts(organizationId?: string): Alert[] {
 
 export function saveAlerts(alerts: Alert[]): void {
   localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(alerts));
+  window.dispatchEvent(new Event('alerts-changed'));
 }
 
 /**
@@ -123,7 +139,12 @@ export function evaluateTelemetry(
   
   // Cargar grupos para ver si el dispositivo es integrante de alguno
   const savedGroups = localStorage.getItem(STORAGE_KEYS.GROUPS);
-  const groups: DeviceGroup[] = savedGroups ? JSON.parse(savedGroups) : [];
+  let groups: DeviceGroup[] = [];
+  try {
+    groups = savedGroups ? JSON.parse(savedGroups) : [];
+  } catch (e) {
+    console.error('Error parseando grupos en evaluateTelemetry', e);
+  }
 
   for (const rule of rules) {
     // 1. Validar si la regla aplica a este dispositivo
@@ -135,7 +156,7 @@ export function evaluateTelemetry(
       matchesDevice = true;
     } else if (rule.deviceGroupId) {
       const group = groups.find(g => g.id === rule.deviceGroupId);
-      if (group && group.deviceEUIs.includes(device.devEUI)) {
+      if (group && (group.deviceEUIs || []).includes(device.devEUI)) {
         matchesDevice = true;
       }
     }

@@ -6,25 +6,19 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('integrations')
-export class Integration {
+@Entity('organizations')
+export class Organization {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ unique: true })
   name: string;
 
   @Column({ nullable: true })
   description: string;
 
-  @Column({ unique: true })
-  secret: string;
-
-  @Column({ type: 'text', nullable: true })
-  decoderCode: string;
-
   @Column({ nullable: true })
-  organizationId: string;
+  parentId: string;
 
   @CreateDateColumn()
   createdAt: Date;

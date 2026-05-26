@@ -32,3 +32,5 @@ lerna-debug.log*
 *.sw?
 .DS_Store
 Thumbs.db
+.claude/
+
