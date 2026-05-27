@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Droplets, Trash2, Plus, Settings,
   Trash, Cpu, Gauge, Map as MapIcon, Thermometer,
@@ -112,6 +112,36 @@ const DEFAULT_DASHBOARD: CustomDashboard = {
   isPreset: false,
   widgets: []
 };
+
+class WidgetErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Widget Error Captured:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'var(--color-muted)' }}>
+          <div style={{ background: '#FCEBEB', color: 'var(--red)', padding: '8px', borderRadius: '50%', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={16} />
+          </div>
+          <span style={{ fontSize: '13px', fontWeight: 600 }}>Error al cargar panel</span>
+          <span style={{ fontSize: '11px', marginTop: '4px', opacity: 0.8 }}>Hubo un problema al renderizar este panel.</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function DashboardPage() {
   const { user, clients } = useAuth();
@@ -2292,9 +2322,12 @@ export default function DashboardPage() {
                         minHeight: 0,
                         display: 'flex',
                         flexDirection: 'column',
-                        justifyContent: widget.type === 'map' ? 'stretch' : 'center'
+                        justifyContent: widget.type === 'map' ? 'stretch' : 'center',
+                        pointerEvents: isEditing ? 'none' : 'auto'
                       }}>
-                        {renderWidgetContent(widget)}
+                        <WidgetErrorBoundary>
+                          {renderWidgetContent(widget)}
+                        </WidgetErrorBoundary>
                       </div>
 
                       {isEditing && (
