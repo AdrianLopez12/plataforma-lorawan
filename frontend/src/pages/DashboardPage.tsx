@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Droplets, Trash2, Plus, Settings,
   Trash, Cpu, Gauge, Map as MapIcon, Thermometer,
@@ -156,6 +156,8 @@ export default function DashboardPage() {
   // Drag & Resize states for custom dashboard grid
   const [tempResizing, setTempResizing] = useState<{ id: string; gridCols: number; heightPx: number } | null>(null);
   const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null);
+  // Ref para debounce de intercambios de paneles (evita loop infinito de re-renders)
+  const lastSwapRef = useRef<{ pair: string; ts: number }>({ pair: '', ts: 0 });
   
   // Modals & Drawer
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -1017,7 +1019,13 @@ export default function DashboardPage() {
 
   const handleCardPointerEnter = (targetWidgetId: string) => {
     if (!draggingWidgetId || draggingWidgetId === targetWidgetId) return;
-    
+
+    // Debounce: ignorar si ya intercambiamos este mismo par en los últimos 400 ms
+    const pair = [draggingWidgetId, targetWidgetId].sort().join('|');
+    const now = Date.now();
+    if (lastSwapRef.current.pair === pair && now - lastSwapRef.current.ts < 400) return;
+    lastSwapRef.current = { pair, ts: now };
+
     const updated = dashboards.map(dash => {
       if (dash.id === activeTab) {
         const widgets = [...dash.widgets];
