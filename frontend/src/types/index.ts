@@ -135,6 +135,8 @@ export interface DashboardWidget {
   color?: 'teal' | 'blue' | 'amber' | 'purple' | 'red' | 'gray';
   width: 'third' | 'half' | 'two-thirds' | 'full';   // column width in the dashboard grid
   height?: 'short' | 'medium' | 'tall' | 'extra-tall'; // panel height in the dashboard grid
+  gridCols?: number;                                 // dynamic column span (1 to 12)
+  heightPx?: number;                                 // dynamic height in pixels
   icon?: string;            // icon chosen for the panel
   tableColumns?: (string | TableColumnConfig)[];   // selected columns to show in a table widget
 }

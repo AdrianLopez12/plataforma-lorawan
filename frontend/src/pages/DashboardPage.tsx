@@ -153,6 +153,10 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<string>('list');
   const [isEditing, setIsEditing] = useState(false);
   
+  // Drag & Resize states for custom dashboard grid
+  const [tempResizing, setTempResizing] = useState<{ id: string; gridCols: number; heightPx: number } | null>(null);
+  const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null);
+  
   // Modals & Drawer
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<'add' | 'edit' | null>(null);
@@ -934,12 +938,12 @@ export default function DashboardPage() {
     saveDashboards(updated);
   };
 
-  const handleResizeWidget = (widgetId: string, newWidth: 'third' | 'half' | 'two-thirds' | 'full') => {
+  const updateWidgetDimensions = (widgetId: string, gridCols: number, heightPx: number) => {
     const updated = dashboards.map(dash => {
       if (dash.id === activeTab) {
         return {
           ...dash,
-          widgets: dash.widgets.map(w => w.id === widgetId ? { ...w, width: newWidth } : w)
+          widgets: dash.widgets.map(w => w.id === widgetId ? { ...w, gridCols, heightPx } : w)
         };
       }
       return dash;
@@ -947,16 +951,90 @@ export default function DashboardPage() {
     saveDashboards(updated);
   };
 
-  const handleResizeWidgetHeight = (widgetId: string, newHeight: 'short' | 'medium' | 'tall' | 'extra-tall') => {
+  const handleResizeStart = (e: React.PointerEvent, widget: DashboardWidget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const cardElement = (e.currentTarget as HTMLElement).closest('.card') as HTMLElement;
+    const gridElement = cardElement?.parentElement as HTMLElement;
+    if (!cardElement || !gridElement) return;
+
+    const cardRect = cardElement.getBoundingClientRect();
+    const gridRect = gridElement.getBoundingClientRect();
+    
+    // Ancho de columna medido restando espacios entre columnas (gap de 24px)
+    const singleColWidth = (gridRect.width - 11 * 24) / 12;
+    
+    const startWidth = cardRect.width;
+    const startHeight = cardRect.height;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      
+      const newWidth = startWidth + deltaX;
+      const newHeight = startHeight + deltaY;
+      
+      // Snapping dinámico de columnas (de 2 a 12)
+      const computedCols = Math.round((newWidth + 24) / (singleColWidth + 24));
+      const gridCols = Math.max(2, Math.min(12, computedCols));
+      
+      // Clamping de altura
+      const minHeight = widget.type === 'kpi' ? 110 : 180;
+      const heightPx = Math.max(minHeight, Math.min(1000, newHeight));
+      
+      setTempResizing({ id: widget.id, gridCols, heightPx });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      
+      setTempResizing(prev => {
+        if (prev && prev.id === widget.id) {
+          updateWidgetDimensions(widget.id, prev.gridCols, prev.heightPx);
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handleDragStart = (e: React.PointerEvent, widgetId: string) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    setDraggingWidgetId(widgetId);
+    
+    const handleGlobalPointerUp = () => {
+      setDraggingWidgetId(null);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+  };
+
+  const handleCardPointerEnter = (targetWidgetId: string) => {
+    if (!draggingWidgetId || draggingWidgetId === targetWidgetId) return;
+    
     const updated = dashboards.map(dash => {
       if (dash.id === activeTab) {
-        return {
-          ...dash,
-          widgets: dash.widgets.map(w => w.id === widgetId ? { ...w, height: newHeight } : w)
-        };
+        const widgets = [...dash.widgets];
+        const dragIdx = widgets.findIndex(w => w.id === draggingWidgetId);
+        const targetIdx = widgets.findIndex(w => w.id === targetWidgetId);
+        
+        if (dragIdx !== -1 && targetIdx !== -1) {
+          // Intercambiar posiciones
+          const temp = widgets[dragIdx];
+          widgets[dragIdx] = widgets[targetIdx];
+          widgets[targetIdx] = temp;
+        }
+        return { ...dash, widgets };
       }
       return dash;
     });
+    
     saveDashboards(updated);
   };
 
@@ -2042,39 +2120,79 @@ export default function DashboardPage() {
             )}
 
             {activeDashboard.widgets.length > 0 && (
-              <div className="dashboard-grid-resizable" style={{ gap: '20px' }}>
+              <div 
+                className="dashboard-grid-resizable" 
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(12, 1fr)', 
+                  gap: '24px',
+                  alignItems: 'start'
+                }}
+              >
                 {activeDashboard.widgets.map((widget) => {
-                  // Calcular el span de columna en la cuadrícula de 12
-                  const getColSpan = () => {
+                  const isTemp = tempResizing && tempResizing.id === widget.id;
+                  const currentCols = isTemp ? tempResizing.gridCols : (widget.gridCols || (() => {
                     const w = widget.width || 'half';
-                    if (w === 'third') return 'span 4';
-                    if (w === 'two-thirds') return 'span 8';
-                    if (w === 'full') return 'span 12';
-                    return 'span 6'; // default
-                  };
+                    if (w === 'third') return 4;
+                    if (w === 'two-thirds') return 8;
+                    if (w === 'full') return 12;
+                    return 6;
+                  })());
+
+                  const currentHeight = isTemp ? `${tempResizing.heightPx}px` : (widget.heightPx ? `${widget.heightPx}px` : (() => {
+                    if (widget.type === 'kpi') return 'auto';
+                    const h = widget.height || 'medium';
+                    if (h === 'short') return '220px';
+                    if (h === 'tall') return '460px';
+                    if (h === 'extra-tall') return '580px';
+                    return '340px'; // 'medium'
+                  })());
+
+                  const isDragging = draggingWidgetId === widget.id;
 
                   return (
                     <div 
                       key={widget.id} 
                       className="card animate-fade-in" 
                       style={{ 
-                        gridColumn: getColSpan(),
+                        gridColumn: `span ${currentCols}`,
                         position: 'relative',
                         display: 'flex',
                         flexDirection: 'column',
-                        minHeight: (() => {
-                          if (widget.type === 'kpi') return 'auto';
-                          const h = widget.height || 'medium';
-                          if (h === 'short') return '220px';
-                          if (h === 'tall') return '460px';
-                          if (h === 'extra-tall') return '580px';
-                          return '340px'; // 'medium'
-                        })(),
+                        height: currentHeight,
+                        minHeight: widget.type === 'kpi' ? 'auto' : '180px',
                         overflow: 'hidden',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                        transition: draggingWidgetId ? 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' : 'all 0.3s ease',
+                        opacity: isDragging ? 0.4 : 1,
+                        transform: isDragging ? 'scale(0.97)' : 'none',
+                        boxShadow: isDragging ? '0 20px 25px -5px rgba(0, 0, 0, 0.1)' : 'none',
+                        border: isDragging ? '2px dashed var(--teal)' : undefined,
+                        zIndex: isDragging ? 30 : 1
+                      }}
+                      onPointerEnter={() => {
+                        if (isEditing) {
+                          handleCardPointerEnter(widget.id);
+                        }
                       }}
                     >
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: widget.type === 'kpi' ? 'none' : '1px solid var(--color-border)', paddingBottom: widget.type === 'kpi' ? 0 : 12, marginBottom: widget.type === 'kpi' ? 4 : 12 }}>
+                      <div 
+                        className="card-header" 
+                        onPointerDown={(e) => {
+                          if (isEditing) {
+                            handleDragStart(e, widget.id);
+                          }
+                        }}
+                        style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          borderBottom: widget.type === 'kpi' ? 'none' : '1px solid var(--color-border)', 
+                          paddingBottom: widget.type === 'kpi' ? 0 : 12, 
+                          marginBottom: widget.type === 'kpi' ? 4 : 12,
+                          cursor: isEditing ? 'move' : 'default',
+                          userSelect: isEditing ? 'none' : 'auto'
+                        }}
+                      >
                         <div>
                           <h3 className="card-title" style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                             {widget.icon ? (
@@ -2113,69 +2231,28 @@ export default function DashboardPage() {
                         {renderWidgetContent(widget)}
                       </div>
 
-                      {/* Barra de redimensionamiento premium inline cuando el modo edición está activo */}
                       {isEditing && (
-                        <div className="widget-edit-toolbar" style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          padding: '10px 12px',
-                          background: 'var(--color-bg-secondary)',
-                          borderTop: '1px solid var(--color-border)',
-                          fontSize: '11px',
-                          gap: '8px',
-                          marginTop: 'auto'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <span style={{ color: 'var(--color-muted)', fontWeight: 600 }}>Ancho:</span>
-                            <div style={{ display: 'flex', gap: '3px' }}>
-                              {(['third', 'half', 'two-thirds', 'full'] as const).map((wSize) => (
-                                <button
-                                  key={wSize}
-                                  onClick={() => handleResizeWidget(widget.id, wSize)}
-                                  className={`btn-secondary ${widget.width === wSize || (!widget.width && wSize === 'half') ? 'active' : ''}`}
-                                  style={{
-                                    padding: '2px 8px',
-                                    fontSize: '10px',
-                                    minWidth: 'auto',
-                                    height: '24px',
-                                    background: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-bg)' : 'transparent',
-                                    borderColor: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal)' : 'var(--color-border)',
-                                    color: (widget.width === wSize || (!widget.width && wSize === 'half')) ? 'var(--teal-dark)' : 'var(--color-text)',
-                                    borderRadius: '4px'
-                                  }}
-                                >
-                                  {wSize === 'third' ? '1/3' : wSize === 'half' ? '1/2' : wSize === 'two-thirds' ? '2/3' : '100%'}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          
-                          {widget.type !== 'kpi' && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                              <span style={{ color: 'var(--color-muted)', fontWeight: 600 }}>Largo:</span>
-                              <div style={{ display: 'flex', gap: '3px' }}>
-                                {(['short', 'medium', 'tall', 'extra-tall'] as const).map((hSize) => (
-                                  <button
-                                    key={hSize}
-                                    onClick={() => handleResizeWidgetHeight(widget.id, hSize)}
-                                    className={`btn-secondary ${widget.height === hSize || (!widget.height && hSize === 'medium') ? 'active' : ''}`}
-                                    style={{
-                                      padding: '2px 8px',
-                                      fontSize: '10px',
-                                      minWidth: 'auto',
-                                      height: '24px',
-                                      background: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal-bg)' : 'transparent',
-                                      borderColor: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal)' : 'var(--color-border)',
-                                      color: (widget.height === hSize || (!widget.height && hSize === 'medium')) ? 'var(--teal-dark)' : 'var(--color-text)',
-                                      borderRadius: '4px'
-                                    }}
-                                  >
-                                    {hSize === 'short' ? 'Corto' : hSize === 'medium' ? 'Medio' : hSize === 'tall' ? 'Alto' : 'Extra'}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                        <div 
+                          onPointerDown={(e) => handleResizeStart(e, widget)}
+                          style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'se-resize',
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            justifyContent: 'flex-end',
+                            padding: '3px',
+                            zIndex: 20
+                          }}
+                          title="Arrastrar para redimensionar"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" strokeWidth="1.5" strokeLinecap="round">
+                            <line x1="2" y1="8" x2="8" y2="2" />
+                            <line x1="5" y1="8" x2="8" y2="5" />
+                          </svg>
                         </div>
                       )}
                     </div>
