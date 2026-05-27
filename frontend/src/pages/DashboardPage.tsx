@@ -592,8 +592,12 @@ export default function DashboardPage() {
     return devOrg === targetOrg;
   });
 
-  // Dispositivos disponibles para el grupo (filtrados por org y tipo)
-  const groupAvailableDevices = filteredDevices.filter(d => d.deviceType === groupType);
+  // Dispositivos disponibles para el grupo (filtrados por org del grupo y tipo de dispositivo)
+  const groupAvailableDevices = devices.filter(d => {
+    const targetOrg = user?.role === 'superadmin' ? groupOrgId : (user?.organizationId || 'plasticos_rival');
+    const devOrg = d.organizationId || 'plasticos_rival';
+    return d.deviceType === groupType && devOrg === targetOrg;
+  });
   const groupFilteredDevices = groupAvailableDevices.filter(d => {
     if (!groupDeviceSearch.trim()) return true;
     const q = groupDeviceSearch.toLowerCase();
@@ -3539,6 +3543,22 @@ export default function DashboardPage() {
             </div>
 
             <div className="drawer-body">
+              {user?.role === 'superadmin' && (
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Tenant / Cliente</label>
+                  <select 
+                    className="form-input" 
+                    value={groupOrgId} 
+                    onChange={(e) => { 
+                      setGroupOrgId(e.target.value); 
+                      setGroupSelectedDevices([]); // Limpiar selección previa al cambiar de tenant
+                    }}
+                  >
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label" style={{ fontWeight: 600 }}>Nombre del Grupo *</label>
                 <input type="text" className="form-input" placeholder="Ej. Medidores Sector Norte" value={groupName} onChange={(e) => setGroupName(e.target.value)} />
@@ -3551,15 +3571,6 @@ export default function DashboardPage() {
                   <option value="smartbin">SmartBins (Contenedores)</option>
                 </select>
               </div>
-
-              {user?.role === 'superadmin' && (
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Tenant / Cliente</label>
-                  <select className="form-input" value={groupOrgId} onChange={(e) => setGroupOrgId(e.target.value)}>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-              )}
 
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
