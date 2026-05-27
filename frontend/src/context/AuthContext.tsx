@@ -34,7 +34,17 @@ const DEFAULT_USERS: User[] = [
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      try {
+        return JSON.parse(stored) as User;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [clients, setClients] = useState<Organization[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
