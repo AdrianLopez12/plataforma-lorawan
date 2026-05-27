@@ -1388,10 +1388,20 @@ export default function DashboardPage() {
         const targetDevices = widget.selectedDevices && widget.selectedDevices.length > 0
           ? filteredDevices.filter(d => widget.selectedDevices?.includes(d.devEUI))
           : filteredDevices;
-        const devicesWithCoords = targetDevices.filter(d => d.lat && d.lng);
+        
+        // Filtrar y validar coordenadas numéricas reales
+        const devicesWithCoords = targetDevices.filter(d => 
+          d.lat !== null && d.lat !== undefined && !isNaN(Number(d.lat)) &&
+          d.lng !== null && d.lng !== undefined && !isNaN(Number(d.lng))
+        );
+        
         const mapCenter: [number, number] = devicesWithCoords.length > 0 
-          ? [devicesWithCoords[0].lat!, devicesWithCoords[0].lng!] 
+          ? [Number(devicesWithCoords[0].lat), Number(devicesWithCoords[0].lng)] 
           : [-0.1950, -78.4900];
+
+        // Usar una clave dinámica única basada en el widget ID, el número de dispositivos y el centro 
+        // para forzar a Leaflet a desmontarse y recrearse limpiamente, evitando el error "Map container is already initialized"
+        const mapKey = `map-${widget.id}-${devicesWithCoords.length}-${mapCenter[0]}-${mapCenter[1]}`;
 
         return (
           <div style={{
@@ -1403,7 +1413,7 @@ export default function DashboardPage() {
             border: '1px solid var(--color-border)',
             boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.04)'
           }}>
-            <MapContainer center={mapCenter} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+            <MapContainer key={mapKey} center={mapCenter} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false}>
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1414,8 +1424,11 @@ export default function DashboardPage() {
                 const filteredHistory = getFilteredTelemetry(devHistory);
                 const latest = filteredHistory[0];
                 const p = latest?.decodedPayload as any;
+                
+                const hasValidDate = latest && latest.receivedAt && !isNaN(new Date(latest.receivedAt).getTime());
+
                 return (
-                  <Marker key={d.id} position={[d.lat!, d.lng!]} icon={icon}>
+                  <Marker key={d.id} position={[Number(d.lat), Number(d.lng)]} icon={icon}>
                     <Popup>
                       <div style={{ fontSize: 11 }}>
                         <strong>{d.name}</strong>
@@ -1426,7 +1439,11 @@ export default function DashboardPage() {
                           <>
                             {p?.flow !== undefined && !isNaN(Number(p.flow)) && <div>Caudal: {Number(p.flow).toFixed(1)} L/h</div>}
                             {p?.fillLevel !== undefined && <div>Llenado: {p.fillLevel}%</div>}
-                            <div style={{ fontSize: 9, color: 'var(--color-hint)', marginTop: 4 }}>Recibido: {format(new Date(latest.receivedAt), 'dd/MM HH:mm:ss')}</div>
+                            {hasValidDate && (
+                              <div style={{ fontSize: 9, color: 'var(--color-hint)', marginTop: 4 }}>
+                                Recibido: {format(new Date(latest.receivedAt), 'dd/MM HH:mm:ss')}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
