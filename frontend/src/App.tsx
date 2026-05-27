@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage';
 import AuditPage from './pages/AuditPage';
 import RuleChainsPage from './pages/RuleChainsPage';
 import RuleChainDesignerPage from './pages/RuleChainDesignerPage';
+import ApiKeysPage from './pages/ApiKeysPage';
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/devices" element={<DevicesPage />} />
             <Route path="/integration" element={<IntegrationPage />} />
+            <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/clients" element={<AdminGuard><ClientsPage /></AdminGuard>} />
             <Route path="/users" element={<AdminGuard><UsersPage /></AdminGuard>} />
             <Route path="/audit" element={<AdminGuard><AuditPage /></AdminGuard>} />

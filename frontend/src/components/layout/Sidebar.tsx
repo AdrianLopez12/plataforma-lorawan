@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Map, Bell, Settings, LogOut, Radio, Cpu, X, Building, Users, History, GitFork } from 'lucide-react';
+import { LayoutDashboard, Map, Bell, Settings, LogOut, Radio, Cpu, X, Building, Users, History, GitFork, Key } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getAlerts } from '../../services/alertsEngine';
 
@@ -10,6 +10,7 @@ const baseNavItems = [
   { to: '/alerts', icon: Bell, label: 'Alertas' },
   { to: '/devices', icon: Radio, label: 'Dispositivos' },
   { to: '/integration', icon: Cpu, label: 'Integración LNS' },
+  { to: '/api-keys', icon: Key, label: 'Desarrolladores & API' },
 ];
 
 interface SidebarProps {
