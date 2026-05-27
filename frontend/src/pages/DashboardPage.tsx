@@ -2236,6 +2236,7 @@ export default function DashboardPage() {
                   display: 'grid', 
                   gridTemplateColumns: 'repeat(12, 1fr)', 
                   gridAutoFlow: 'dense',
+                  gridAutoRows: '10px',
                   gap: '24px',
                   alignItems: 'start'
                 }}
@@ -2250,14 +2251,17 @@ export default function DashboardPage() {
                     return 6;
                   })());
 
-                  const currentHeight = isTemp ? `${tempResizing.heightPx}px` : (widget.heightPx ? `${widget.heightPx}px` : (() => {
-                    if (widget.type === 'kpi') return 'auto';
+                  const numericHeight = isTemp ? tempResizing.heightPx : (widget.heightPx ? widget.heightPx : (() => {
+                    if (widget.type === 'kpi') return 110;
                     const h = widget.height || 'medium';
-                    if (h === 'short') return '220px';
-                    if (h === 'tall') return '460px';
-                    if (h === 'extra-tall') return '580px';
-                    return '340px'; // 'medium'
+                    if (h === 'short') return 220;
+                    if (h === 'tall') return 460;
+                    if (h === 'extra-tall') return 580;
+                    return 340;
                   })());
+
+                  const currentHeight = widget.type === 'kpi' && !isTemp ? 'auto' : `${numericHeight}px`;
+                  const rowSpan = Math.ceil((numericHeight + 24) / 34);
 
                   const isDragging  = draggingWidgetId === widget.id;
                   const isDropTarget = dragOverWidgetId === widget.id;
@@ -2269,6 +2273,7 @@ export default function DashboardPage() {
                       className="card animate-fade-in"
                       style={{
                         gridColumn: `span ${currentCols}`,
+                        gridRow: `span ${rowSpan}`,
                         position: 'relative',
                         display: 'flex',
                         flexDirection: 'column',
