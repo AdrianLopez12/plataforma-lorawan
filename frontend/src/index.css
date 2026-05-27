@@ -856,6 +856,40 @@ select.form-input {
   color: var(--teal-dark);
 }
 
+.filter-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 30px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-muted);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.filter-tab:hover {
+  background: rgba(15, 23, 42, 0.02);
+  color: var(--color-text);
+  border-color: var(--color-hint);
+}
+
+.filter-tab.active {
+  background: linear-gradient(135deg, var(--teal-bg) 0%, rgba(225, 245, 238, 0.4) 100%);
+  border-color: var(--teal);
+  color: var(--teal-dark);
+  box-shadow: 0 4px 12px rgba(29, 158, 117, 0.08);
+}
+
 /* ==========================================================================
    DEVELOPER PLAYGROUND & RETRO TERMINAL SHELL
    ========================================================================== */
