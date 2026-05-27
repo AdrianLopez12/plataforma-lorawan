@@ -17,7 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import {
   PlayCircle, ShieldAlert, FileSpreadsheet, Mail, Globe, Send, Radio,
-  ArrowLeft, Save, HelpCircle, RefreshCw, Layers
+  ArrowLeft, Save, HelpCircle, RefreshCw, Layers, Clock, MapPin, AlertOctagon
 } from 'lucide-react';
 
 // Custom Nodes Components
@@ -123,6 +123,60 @@ function RPCNode({ data }: any) {
   );
 }
 
+function TimeRangeNode({ data }: any) {
+  return (
+    <div style={{ background: '#FAEEDA', border: '2px solid #854F0B', borderRadius: 8, padding: '10px 14px', minWidth: 160, color: '#633806', position: 'relative' }}>
+      <Handle type="target" position={Position.Left} style={{ background: '#854F0B', width: 8, height: 8 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 650, fontSize: 13 }}>
+        <Clock size={15} style={{ color: '#854F0B' }} />
+        <span>{data.label || 'Rango Horario'}</span>
+      </div>
+      <div style={{ fontSize: 9.5, marginTop: 4, color: 'var(--color-muted)' }}>
+        Rango: {data.startTime || '22:00'} - {data.endTime || '06:00'}
+      </div>
+      <Handle type="source" position={Position.Right} id="Inside" style={{ top: '30%', background: '#1D9E75', width: 7, height: 7 }} />
+      <span style={{ position: 'absolute', right: -32, top: '15%', fontSize: 8.5, fontWeight: 700, color: '#1D9E75' }}>Inside</span>
+      <Handle type="source" position={Position.Right} id="Outside" style={{ top: '70%', background: '#A32D2D', width: 7, height: 7 }} />
+      <span style={{ position: 'absolute', right: -36, top: '55%', fontSize: 8.5, fontWeight: 700, color: '#A32D2D' }}>Outside</span>
+    </div>
+  );
+}
+
+function GeofenceNode({ data }: any) {
+  return (
+    <div style={{ background: '#FAEEDA', border: '2px solid #854F0B', borderRadius: 8, padding: '10px 14px', minWidth: 160, color: '#633806', position: 'relative' }}>
+      <Handle type="target" position={Position.Left} style={{ background: '#854F0B', width: 8, height: 8 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 650, fontSize: 13 }}>
+        <MapPin size={15} style={{ color: '#854F0B' }} />
+        <span>{data.label || 'Geocerca GPS'}</span>
+      </div>
+      <div style={{ fontSize: 9, marginTop: 4, color: 'var(--color-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        R: {data.radius || 5000}m | Lat: {data.latitude || -0.18}
+      </div>
+      <Handle type="source" position={Position.Right} id="Inside" style={{ top: '30%', background: '#1D9E75', width: 7, height: 7 }} />
+      <span style={{ position: 'absolute', right: -32, top: '15%', fontSize: 8.5, fontWeight: 700, color: '#1D9E75' }}>Inside</span>
+      <Handle type="source" position={Position.Right} id="Outside" style={{ top: '70%', background: '#A32D2D', width: 7, height: 7 }} />
+      <span style={{ position: 'absolute', right: -36, top: '55%', fontSize: 8.5, fontWeight: 700, color: '#A32D2D' }}>Outside</span>
+    </div>
+  );
+}
+
+function SystemAlertNode({ data }: any) {
+  return (
+    <div style={{ background: '#FCEBEB', border: '2px solid #A32D2D', borderRadius: 8, padding: '10px 14px', minWidth: 155, color: '#A32D2D' }}>
+      <Handle type="target" position={Position.Left} style={{ background: '#A32D2D', width: 8, height: 8 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 650, fontSize: 13 }}>
+        <AlertOctagon size={15} style={{ color: '#A32D2D' }} />
+        <span>{data.label || 'Crear Alerta'}</span>
+      </div>
+      <div style={{ fontSize: 9, marginTop: 2, color: '#6b6a64', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {data.message || 'Alerta de sensor'}
+      </div>
+      <Handle type="source" position={Position.Right} id="Success" style={{ background: '#A32D2D', width: 8, height: 8 }} />
+    </div>
+  );
+}
+
 export default function RuleChainDesignerPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -148,7 +202,13 @@ export default function RuleChainDesignerPage() {
     webhook: WebhookNode,
     restCall: WebhookNode,
     rpc: RPCNode,
-    rpcCall: RPCNode
+    rpcCall: RPCNode,
+    timeRange: TimeRangeNode,
+    timeFilter: TimeRangeNode,
+    geofence: GeofenceNode,
+    gpsFilter: GeofenceNode,
+    createAlert: SystemAlertNode,
+    sysAlert: SystemAlertNode
   }), []);
 
   useEffect(() => {
@@ -231,7 +291,15 @@ export default function RuleChainDesignerPage() {
         subject: type === 'email' ? 'Alerta Crítica IoT' : undefined,
         body: type === 'email' ? 'Dispositivo excedió umbral.' : undefined,
         command: type === 'rpc' ? 'close' : undefined,
-        url: type === 'webhook' ? 'https://api.rival.com/alert' : undefined
+        url: type === 'webhook' ? 'https://api.rival.com/alert' : undefined,
+        startTime: type === 'timeRange' ? '22:00' : undefined,
+        endTime: type === 'timeRange' ? '06:00' : undefined,
+        latitude: type === 'geofence' ? -0.1807 : undefined,
+        longitude: type === 'geofence' ? -78.4678 : undefined,
+        radius: type === 'geofence' ? 5000 : undefined,
+        alertType: type === 'createAlert' ? 'leak' : undefined,
+        message: type === 'createAlert' ? 'Alerta Crítica: anomalía detectada.' : undefined,
+        severity: type === 'createAlert' ? 'critical' : undefined
       }
     };
     setNodes((nds) => [...nds, newNode]);
@@ -361,6 +429,18 @@ export default function RuleChainDesignerPage() {
           
           <button onClick={() => addNodeToCanvas('rpc', 'Downlink Control')} className="filter-tab" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', width: '100%', borderRadius: 8, background: '#FCEBEB', border: '1px solid #E24B4A', color: '#E24B4A', cursor: 'pointer', textAlign: 'left', fontWeight: 600, fontSize: 12.5 }}>
             <Send size={14} /> Downlink RPC
+          </button>
+          
+          <button onClick={() => addNodeToCanvas('timeRange', 'Filtrar Horario')} className="filter-tab" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', width: '100%', borderRadius: 8, background: '#FAEEDA', border: '1px solid #854F0B', color: '#633806', cursor: 'pointer', textAlign: 'left', fontWeight: 600, fontSize: 12.5 }}>
+            <Clock size={14} /> Filtrar Horario
+          </button>
+          
+          <button onClick={() => addNodeToCanvas('geofence', 'Geocerca GPS')} className="filter-tab" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', width: '100%', borderRadius: 8, background: '#FAEEDA', border: '1px solid #854F0B', color: '#633806', cursor: 'pointer', textAlign: 'left', fontWeight: 600, fontSize: 12.5 }}>
+            <MapPin size={14} /> Geocerca GPS
+          </button>
+          
+          <button onClick={() => addNodeToCanvas('createAlert', 'Crear Alerta')} className="filter-tab" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', width: '100%', borderRadius: 8, background: '#FCEBEB', border: '1px solid #A32D2D', color: '#A32D2D', cursor: 'pointer', textAlign: 'left', fontWeight: 600, fontSize: 12.5 }}>
+            <AlertOctagon size={14} /> Crear Alerta
           </button>
 
           <div style={{ marginTop: 'auto', borderTop: '0.5px solid var(--color-border)', paddingTop: 14, fontSize: 11, color: 'var(--color-hint)', display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.4 }}>
@@ -497,6 +577,115 @@ export default function RuleChainDesignerPage() {
                   <option value="open">Abrir Válvula Solenoide</option>
                 </select>
               </div>
+            )}
+
+            {selectedNode.type === 'timeRange' && (
+              <>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Hora Inicio (HH:MM)</label>
+                  <input
+                    className="form-input"
+                    style={{ height: 34, fontSize: 13 }}
+                    placeholder="22:00"
+                    value={selectedNode.data.startTime || ''}
+                    onChange={(e) => updateNodeData('startTime', e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Hora Fin (HH:MM)</label>
+                  <input
+                    className="form-input"
+                    style={{ height: 34, fontSize: 13 }}
+                    placeholder="06:00"
+                    value={selectedNode.data.endTime || ''}
+                    onChange={(e) => updateNodeData('endTime', e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {selectedNode.type === 'geofence' && (
+              <>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Latitud Centro</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="form-input"
+                    style={{ height: 34, fontSize: 13 }}
+                    placeholder="-0.1807"
+                    value={selectedNode.data.latitude ?? ''}
+                    onChange={(e) => updateNodeData('latitude', Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Longitud Centro</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="form-input"
+                    style={{ height: 34, fontSize: 13 }}
+                    placeholder="-78.4678"
+                    value={selectedNode.data.longitude ?? ''}
+                    onChange={(e) => updateNodeData('longitude', Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Radio Geocerca (metros)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    style={{ height: 34, fontSize: 13 }}
+                    placeholder="5000"
+                    value={selectedNode.data.radius ?? ''}
+                    onChange={(e) => updateNodeData('radius', Number(e.target.value))}
+                  />
+                </div>
+              </>
+            )}
+
+            {selectedNode.type === 'createAlert' && (
+              <>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Tipo de Alerta</label>
+                  <select
+                    className="form-input"
+                    style={{ height: 34, padding: '0 10px', fontSize: 13 }}
+                    value={selectedNode.data.alertType || 'leak'}
+                    onChange={(e) => updateNodeData('alertType', e.target.value)}
+                  >
+                    <option value="leak">Fuga de Agua</option>
+                    <option value="overflow">Desborde / Llenado Alto</option>
+                    <option value="bin_full">Contenedor Lleno</option>
+                    <option value="battery">Batería Baja</option>
+                    <option value="tamper">Manipulación / Sabotaje</option>
+                    <option value="frost">Riesgo de Helada</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Mensaje de la Alerta</label>
+                  <textarea
+                    className="form-input"
+                    rows={3}
+                    style={{ fontSize: 12.5, minHeight: 70 }}
+                    value={selectedNode.data.message || ''}
+                    onChange={(e) => updateNodeData('message', e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: 12 }}>Severidad</label>
+                  <select
+                    className="form-input"
+                    style={{ height: 34, padding: '0 10px', fontSize: 13 }}
+                    value={selectedNode.data.severity || 'critical'}
+                    onChange={(e) => updateNodeData('severity', e.target.value)}
+                  >
+                    <option value="critical">Crítica (Rojo)</option>
+                    <option value="warning">Advertencia (Naranja)</option>
+                    <option value="info">Informativa (Azul)</option>
+                  </select>
+                </div>
+              </>
             )}
           </div>
         )}

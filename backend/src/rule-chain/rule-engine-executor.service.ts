@@ -41,7 +41,7 @@ export class RuleEngineExecutorService {
     this.logger.log(`Ejecutando Nodo de Regla: ${node.id} (${node.type || 'unknown'})`);
 
     let outputPayload = { ...payload };
-    let routingLabel: 'Success' | 'True' | 'False' | 'Other' | null = null;
+    let routingLabel: 'Success' | 'True' | 'False' | 'Other' | 'Inside' | 'Outside' | null = null;
 
     try {
       switch (node.type) {
@@ -123,6 +123,65 @@ export class RuleEngineExecutorService {
           routingLabel = 'Success';
           break;
 
+        case 'timeRange':
+        case 'timeFilter':
+          const startStr = node.data?.startTime || '22:00';
+          const endStr = node.data?.endTime || '06:00';
+          
+          const now = new Date();
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          const currentTimeNum = currentHour * 60 + currentMinute;
+
+          const [startHour, startMin] = startStr.split(':').map(Number);
+          const [endHour, endMin] = endStr.split(':').map(Number);
+          const startTimeNum = startHour * 60 + startMin;
+          const endTimeNum = endHour * 60 + endMin;
+
+          let isInside = false;
+          if (startTimeNum <= endTimeNum) {
+            isInside = currentTimeNum >= startTimeNum && currentTimeNum <= endTimeNum;
+          } else {
+            isInside = currentTimeNum >= startTimeNum || currentTimeNum <= endTimeNum;
+          }
+          routingLabel = isInside ? 'Inside' : 'Outside';
+          break;
+
+        case 'geofence':
+        case 'gpsFilter':
+          const centerLat = Number(node.data?.latitude ?? -0.1807);
+          const centerLng = Number(node.data?.longitude ?? -78.4678);
+          const maxRadius = Number(node.data?.radius ?? 5000);
+
+          const devLat = outputPayload.lat ?? device.lat;
+          const devLng = outputPayload.lng ?? device.lng;
+
+          let isInsideGeofence = false;
+          if (devLat !== undefined && devLng !== undefined && devLat !== null && devLng !== null) {
+            const distance = this.getDistance(centerLat, centerLng, Number(devLat), Number(devLng));
+            isInsideGeofence = distance <= maxRadius;
+          }
+          routingLabel = isInsideGeofence ? 'Inside' : 'Outside';
+          break;
+
+        case 'createAlert':
+        case 'sysAlert':
+          const alertType = node.data?.alertType || 'leak';
+          const msg = node.data?.message || 'Alerta disparada por el motor de reglas visual';
+          const severity = node.data?.severity || 'critical';
+
+          this.logger.log(`[ALERTA SISTEMA] Tipo: ${alertType} | Severidad: ${severity} | Mensaje: ${msg}`);
+
+          await this.auditLogService.record(
+            'ALERT_GENERATED',
+            { name: 'Rule Engine', email: 'system@lorawan.com', role: 'superadmin' } as any,
+            { alertType, severity, message: msg, devEUI: device.devEUI },
+            '127.0.0.1',
+            device.organizationId
+          );
+          routingLabel = 'Success';
+          break;
+
         default:
           this.logger.warn(`Tipo de nodo no manejado: ${node.type}`);
           routingLabel = 'Success';
@@ -163,5 +222,20 @@ export class RuleEngineExecutorService {
       this.logger.warn(`Error al evaluar la expresión: "${expression}". Detalle: ${e.message}`);
       return false;
     }
+  }
+
+  private getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const phi1 = (lat1 * Math.PI) / 180;
+    const phi2 = (lat2 * Math.PI) / 180;
+    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+      Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // en metros
   }
 }
