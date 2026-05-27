@@ -1556,3 +1556,191 @@ code {
   font-weight: 500;
   opacity: 0.8;
 }
+
+/* ==========================================================================
+   REALTIME PUSH NOTIFICATIONS (TOASTS) GLASSMORPHIC OVERLAY
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 9999;
+  width: 360px;
+  max-width: calc(100vw - 48px);
+  pointer-events: none;
+}
+
+.toast-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 44px 16px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.12),
+              inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  pointer-events: auto;
+  overflow: hidden;
+  animation: toastSlideIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s ease;
+}
+
+.toast-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 25px 45px -8px rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.toast-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 5px;
+}
+
+.toast-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  margin-top: 2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.toast-content {
+  flex: 1;
+}
+
+.toast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.toast-title {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--color-text);
+}
+
+.toast-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1.5px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+
+.toast-message {
+  font-size: 12.5px;
+  color: var(--color-muted);
+  line-height: 1.4;
+  margin: 0 0 6px 0;
+  font-weight: 500;
+}
+
+.toast-time {
+  font-size: 10px;
+  color: var(--color-hint);
+  font-weight: 500;
+}
+
+.toast-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--color-hint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.toast-close:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--color-text);
+}
+
+/* Severity styles overrides */
+.toast-critical .toast-indicator {
+  background: var(--red);
+}
+.toast-critical .toast-icon-wrapper {
+  background: var(--red-bg);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--red);
+}
+.toast-critical .toast-tag {
+  background: var(--red-bg);
+  color: var(--red);
+}
+.toast-critical {
+  border-left-color: var(--red);
+  box-shadow: 0 20px 40px -10px rgba(239, 68, 68, 0.12),
+              inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.toast-warning .toast-indicator {
+  background: var(--amber);
+}
+.toast-warning .toast-icon-wrapper {
+  background: var(--amber-bg);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--amber-dark);
+}
+.toast-warning .toast-tag {
+  background: var(--amber-bg);
+  color: var(--amber-dark);
+}
+.toast-warning {
+  border-left-color: var(--amber);
+  box-shadow: 0 20px 40px -10px rgba(245, 158, 11, 0.1),
+              inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.toast-info .toast-indicator {
+  background: var(--teal);
+}
+.toast-info .toast-icon-wrapper {
+  background: var(--teal-bg);
+  border: 1px solid rgba(29, 158, 117, 0.2);
+  color: var(--teal);
+}
+.toast-info .toast-tag {
+  background: var(--teal-bg);
+  color: var(--teal-dark);
+}
+.toast-info {
+  border-left-color: var(--teal);
+  box-shadow: 0 20px 40px -10px rgba(29, 158, 117, 0.08),
+              inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+

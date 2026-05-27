@@ -3,6 +3,7 @@ import { TelemetryService } from '../telemetry/telemetry.service';
 import { DevicesService } from '../devices/devices.service';
 import { AuditLogService } from '../common/audit-log.service';
 import { RuleChain } from './rule-chain.entity';
+import { RealtimeService } from '../telemetry/realtime.service';
 
 @Injectable()
 export class RuleEngineExecutorService {
@@ -12,6 +13,7 @@ export class RuleEngineExecutorService {
     private readonly telemetryService: TelemetryService,
     private readonly devicesService: DevicesService,
     private readonly auditLogService: AuditLogService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async execute(ruleChain: RuleChain, initialPayload: any, device: any) {
@@ -179,6 +181,18 @@ export class RuleEngineExecutorService {
             '127.0.0.1',
             device.organizationId
           );
+
+          // Emitir la alerta en tiempo real a los clientes vía SSE
+          this.realtimeService.emitAlert({
+            id: 'alert-' + Math.random().toString(36).substr(2, 9),
+            devEUI: device.devEUI,
+            deviceName: device.name || `Dispositivo ${device.devEUI.substring(0, 6)}`,
+            severity,
+            message: msg,
+            acknowledged: false,
+            timestamp: new Date().toISOString(),
+          });
+
           routingLabel = 'Success';
           break;
 

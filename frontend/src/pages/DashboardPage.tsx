@@ -626,6 +626,42 @@ export default function DashboardPage() {
       });
   }, []);
 
+  // Escuchar actualizaciones de telemetría en tiempo real
+  useEffect(() => {
+    const handleRealtimeTelemetry = (e: Event) => {
+      const customEvent = e as CustomEvent<{ devEUI: string; name: string; lastTelemetry: any }>;
+      const telemetryUpdate = customEvent.detail;
+      if (!telemetryUpdate) return;
+
+      console.log('⚡ Dashboard recibió telemetría en tiempo real:', telemetryUpdate.devEUI);
+
+      setDevices((prevDevices) => {
+        const index = prevDevices.findIndex((d) => d.devEUI === telemetryUpdate.devEUI);
+        if (index === -1) {
+          // Si es un dispositivo nuevo autoprovisto, recargar la lista
+          getDevices().then(data => {
+            if (data && data.length > 0) setDevices(data);
+          }).catch(() => {});
+          return prevDevices;
+        }
+
+        // Actualizar el lastTelemetry del dispositivo existente
+        const updated = [...prevDevices];
+        updated[index] = {
+          ...updated[index],
+          lastTelemetry: telemetryUpdate.lastTelemetry,
+        };
+        return updated;
+      });
+    };
+
+    window.addEventListener('realtime-telemetry-received', handleRealtimeTelemetry);
+    return () => {
+      window.removeEventListener('realtime-telemetry-received', handleRealtimeTelemetry);
+    };
+  }, []);
+
+
   // Cargar telemetrías cuando cambia el tab, los widgets o los dispositivos
   useEffect(() => {
     if (activeTab === 'list') return;

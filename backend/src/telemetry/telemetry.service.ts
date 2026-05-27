@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TelemetryRecord } from './telemetry.entity';
 import { DecoderService } from './decoder.service';
 import { DevicesService } from '../devices/devices.service';
+import { RealtimeService } from './realtime.service';
 
 @Injectable()
 export class TelemetryService {
@@ -14,6 +15,7 @@ export class TelemetryService {
     private readonly telemetryRepo: Repository<TelemetryRecord>,
     private readonly decoder: DecoderService,
     private readonly devicesService: DevicesService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   /**
@@ -74,6 +76,14 @@ export class TelemetryService {
     this.logger.log(
       `Guardado (Con Desvío): devEUI=${saved.devEUI} fPort=${saved.fPort} integrationId=${integrationId} decoded=${JSON.stringify(decodedPayload)}`,
     );
+
+    // Emitir el evento de telemetría en tiempo real por SSE
+    this.realtimeService.emitTelemetry({
+      devEUI: saved.devEUI,
+      name: device.name || `Dispositivo ${saved.devEUI.substring(0, 6)}`,
+      lastTelemetry: saved,
+    });
+
     return saved;
   }
 

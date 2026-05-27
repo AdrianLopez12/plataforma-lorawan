@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AppLayout from './components/layout/AppLayout';
@@ -16,6 +17,8 @@ import AuditPage from './pages/AuditPage';
 import RuleChainsPage from './pages/RuleChainsPage';
 import RuleChainDesignerPage from './pages/RuleChainDesignerPage';
 import ApiKeysPage from './pages/ApiKeysPage';
+import RealtimeToastContainer from './components/alerts/RealtimeToastContainer';
+import { getAlerts, saveAlerts } from './services/alertsEngine';
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -25,10 +28,66 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RealtimeSubscriber() {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return; // Solo conectar si hay sesión activa
+
+    const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const sseUrl = `${serverUrl}/telemetry/stream`;
+    console.log('🔌 Conectando a canal de tiempo real SSE:', sseUrl);
+
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+        if (parsed.type === 'telemetry') {
+          // Despachar evento para dashboards reactivos
+          window.dispatchEvent(
+            new CustomEvent('realtime-telemetry-received', { detail: parsed.data })
+          );
+        } else if (parsed.type === 'alert') {
+          const alertData = parsed.data;
+
+          // Guardar alerta localmente en el historial
+          const storedAlerts = getAlerts();
+          const alreadyExists = storedAlerts.some((a) => a.id === alertData.id);
+
+          if (!alreadyExists) {
+            const updated = [alertData, ...storedAlerts];
+            saveAlerts(updated); // Esto internamente ya despacha 'alerts-changed'
+          }
+
+          // Disparar evento para que el RealtimeToastContainer renderice el Toast
+          window.dispatchEvent(
+            new CustomEvent('realtime-alert-received', { detail: alertData })
+          );
+        }
+      } catch (err) {
+        console.error('Error parseando evento SSE:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.warn('Conexión perdida en canal SSE. EventSource reconectará de forma automática...', err);
+    };
+
+    return () => {
+      console.log('🔌 Desconectando canal de tiempo real SSE');
+      eventSource.close();
+    };
+  }, [user]);
+
+  return <RealtimeToastContainer />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <RealtimeSubscriber />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AppLayout />}>
@@ -53,3 +112,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+
