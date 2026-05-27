@@ -77,6 +77,11 @@ export const getRawDevices = (integrationId?: string) =>
   api.get('/devices', { params: { integrationId } }).then((r) => r.data);
 export const getDevice = (devEUI: string) => api.get(`/devices/${devEUI}`).then((r) => r.data);
 export const updateDevice = (devEUI: string, data: any) => api.patch(`/devices/${devEUI}`, data).then((r) => r.data);
+export const sendDownlink = (devEUI: string, command: 'open' | 'close') =>
+  api.post(`/devices/${devEUI}/downlink`, { command }).then((r) => r.data);
+
+// Audit Logs
+export const getAuditLogs = () => api.get('/audit-logs').then((r) => r.data);
 
 // Webhook & Decoder
 export const getWebhookConfig = () => api.get('/webhook/config').then((r) => r.data);

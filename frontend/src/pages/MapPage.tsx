@@ -54,7 +54,7 @@ export default function MapPage() {
   useEffect(() => {
     getDevices()
       .then((data) => {
-        if (data && data.length > 0) {
+        if (data) {
           setDevices(data);
         }
       })

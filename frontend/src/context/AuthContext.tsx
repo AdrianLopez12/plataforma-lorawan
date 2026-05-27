@@ -213,6 +213,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteUser = (id: string) => {
+    const target = users.find((u) => u.id === id);
+    if (target && target.role === 'superadmin') {
+      console.warn("Intento de eliminación de Super Administrador bloqueado.");
+      return;
+    }
     const updated = users.filter((u) => u.id !== id);
     saveUsersToStore(updated);
     

@@ -36,6 +36,7 @@ export default function DevicesPage() {
   const [editLng, setEditLng] = useState('');
   const [editInstallationDate, setEditInstallationDate] = useState('');
   const [editLocationDesc, setEditLocationDesc] = useState('');
+  const [editCodecJs, setEditCodecJs] = useState('');
 
   const handleAssignOrg = (devEUI: string, orgId: string) => {
     updateDevice(devEUI, { organizationId: orgId })
@@ -78,6 +79,7 @@ export default function DevicesPage() {
     setEditLng(device.lng !== undefined ? String(device.lng) : '');
     setEditInstallationDate(params.installationDate || '');
     setEditLocationDesc(params.locationDescription || '');
+    setEditCodecJs(device.codecJs || '');
     setIsEditingStatic(false);
 
     getDeviceTelemetry(device.devEUI, 20)
@@ -129,32 +131,46 @@ export default function DevicesPage() {
     allParams[selectedDevice.devEUI] = updatedParams;
     localStorage.setItem('device_static_parameters', JSON.stringify(allParams));
 
-    // Actualizar estados locales de selectedDevice y devices
-    const updatedDevice: Device = {
-      ...selectedDevice,
-      name: updatedParams.customAlias || selectedDevice.name,
-      lat: latNum ?? selectedDevice.lat,
-      lng: lngNum ?? selectedDevice.lng,
-      staticParams: updatedParams
-    };
-    
-    setSelectedDevice(updatedDevice);
-    
-    // Actualizar la lista general de dispositivos
-    setDevices(prev => prev.map(d => {
-      if (d.devEUI === selectedDevice.devEUI) {
-        return {
-          ...d,
-          name: updatedParams.customAlias || d.name,
-          lat: latNum ?? d.lat,
-          lng: lngNum ?? d.lng,
+    // Guardar en la base de datos real a través de la API
+    updateDevice(selectedDevice.devEUI, {
+      name: updatedParams.customAlias || selectedDevice.devEUI,
+      lat: latNum,
+      lng: lngNum,
+      codecJs: editCodecJs.trim() || null
+    })
+      .then(() => {
+        const updatedDevice: Device = {
+          ...selectedDevice,
+          name: updatedParams.customAlias || selectedDevice.name,
+          lat: latNum ?? selectedDevice.lat,
+          lng: lngNum ?? selectedDevice.lng,
+          codecJs: editCodecJs.trim() || undefined,
           staticParams: updatedParams
         };
-      }
-      return d;
-    }));
+        
+        setSelectedDevice(updatedDevice);
+        
+        // Actualizar en la lista local de dispositivos
+        setDevices(prev => prev.map(d => {
+          if (d.devEUI === selectedDevice.devEUI) {
+            return {
+              ...d,
+              name: updatedParams.customAlias || d.name,
+              lat: latNum ?? d.lat,
+              lng: lngNum ?? d.lng,
+              codecJs: editCodecJs.trim() || undefined,
+              staticParams: updatedParams
+            };
+          }
+          return d;
+        }));
 
-    setIsEditingStatic(false);
+        setIsEditingStatic(false);
+      })
+      .catch((err) => {
+        console.error("Error al actualizar parámetros en la base de datos:", err);
+        alert("Ocurrió un error al guardar la configuración en la base de datos del servidor.");
+      });
   };
 
   const handleCloseDrawer = () => {
@@ -573,6 +589,14 @@ export default function DevicesPage() {
                         {selectedDevice.staticParams?.locationDescription || 'Sin detalles de ubicación estáticos'}
                       </span>
                     </div>
+                    {selectedDevice.codecJs && (
+                      <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: 8 }}>
+                        <span style={{ fontSize: '10px', color: 'var(--color-muted)', display: 'block' }}>Decodificador JS Personalizado</span>
+                        <pre style={{ margin: '4px 0 0 0', background: '#151515', color: '#34d399', padding: '10px', borderRadius: '6px', fontSize: '10px', fontFamily: 'monospace', overflowX: 'auto', border: '1px solid var(--color-border)' }}>
+                          {selectedDevice.codecJs}
+                        </pre>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--color-surface)', padding: '14px', borderRadius: '10px', border: '0.5px solid var(--color-border)' }}>
@@ -631,6 +655,16 @@ export default function DevicesPage() {
                         onChange={(e) => setEditLocationDesc(e.target.value)} 
                         placeholder="Ej. Instalado en tubería matriz exterior, entrada lateral." 
                         style={{ minHeight: '60px', fontSize: '12px', padding: '6px 8px', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Decodificador JavaScript Personalizado (Opcional)</label>
+                      <textarea 
+                        className="form-input" 
+                        value={editCodecJs} 
+                        onChange={(e) => setEditCodecJs(e.target.value)} 
+                        placeholder="function decode(bytes, port) { return { flow: bytes[0] }; }" 
+                        style={{ minHeight: '100px', fontSize: '11px', fontFamily: 'monospace', padding: '8px', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
                       />
                     </div>
                   </div>

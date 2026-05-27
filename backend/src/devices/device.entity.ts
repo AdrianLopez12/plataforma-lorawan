@@ -37,6 +37,18 @@ export class Device {
   @Column({ nullable: true })
   organizationId: string;
 
+  @Column({ default: true })
+  valveOpen: boolean;
+
+  @Column({ nullable: true, type: 'text' })
+  codecJs: string;
+
+  @Column({ type: 'float', nullable: true })
+  lat: number;
+
+  @Column({ type: 'float', nullable: true })
+  lng: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

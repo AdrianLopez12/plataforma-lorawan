@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Map, Bell, Settings, LogOut, Radio, Cpu, X, Building, Users } from 'lucide-react';
+import { LayoutDashboard, Map, Bell, Settings, LogOut, Radio, Cpu, X, Building, Users, History } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getAlerts } from '../../services/alertsEngine';
 
@@ -52,7 +52,8 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   if (user?.role === 'superadmin' || user?.role === 'admin') {
     navItems.push(
       { to: '/clients', icon: Building, label: 'Clientes (Tenants)' },
-      { to: '/users', icon: Users, label: 'Usuarios' }
+      { to: '/users', icon: Users, label: 'Usuarios' },
+      { to: '/audit', icon: History, label: 'Auditoría' }
     );
   }
 

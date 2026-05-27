@@ -721,3 +721,92 @@ select.form-input {
   color: var(--teal-dark) !important;
   padding-left: 16px !important; /* Micro-desplazamiento interactivo premium */
 }
+
+/* ==========================================================================
+   PRINT MEDIA STYLES (PDF & PRINT GENERATION)
+   ========================================================================== */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  .sidebar,
+  .no-print,
+  .mobile-header,
+  .sidebar-overlay,
+  .slide-over-overlay,
+  .slide-over-overlay-left,
+  .device-panel,
+  .logout-btn,
+  .nav-item {
+    display: none !important;
+  }
+
+  .app-layout {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .main-content {
+    display: block !important;
+    width: 100% !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .page {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+
+  .print-only-header {
+    display: block !important;
+  }
+
+  .two-col-layout {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .detail-panel {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  .card, .bin-card {
+    background: #ffffff !important;
+    border: 1px solid rgba(0,0,0,0.15) !important;
+    box-shadow: none !important;
+    margin-bottom: 20px !important;
+    page-break-inside: avoid;
+    transform: none !important;
+  }
+
+  .metrics-grid, .bins-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 15px !important;
+    page-break-inside: avoid;
+  }
+
+  .metric-box {
+    border: 1px solid rgba(0,0,0,0.1) !important;
+    background: #fdfdfd !important;
+    box-shadow: none !important;
+  }
+
+  /* Force background colors and colors to print in browsers */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

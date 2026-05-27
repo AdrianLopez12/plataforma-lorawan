@@ -33,6 +33,19 @@ export interface Device {
   lastTelemetry?: TelemetryRecord;
   staticParams?: Record<string, any>;
   organizationId?: string;
+  valveOpen?: boolean;
+  codecJs?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  userName: string;
+  userEmail: string;
+  action: string;
+  details?: string;
+  ipAddress: string;
+  organizationId?: string;
+  createdAt: string;
 }
 
 export interface TelemetryRecord {

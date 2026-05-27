@@ -31,7 +31,7 @@ export class TelemetryService {
    */
   async saveUplink(payload: any, integrationId?: string, decoderCode?: string): Promise<TelemetryRecord> {
     // Registrar el device si es la primera vez que lo vemos
-    await this.devicesService.findOrCreate(payload.devEUI, integrationId);
+    const device = await this.devicesService.findOrCreate(payload.devEUI, integrationId);
 
     // Extraer datos de señal del primer gateway
     const rxInfo = payload.rxInfo?.[0] ?? {};
@@ -40,9 +40,10 @@ export class TelemetryService {
       payload.txInfo?.dataRate?.spreadingFactor ??
       null;
 
-    // Decodificar payload
+    // Decodificar payload (prioriza el decodificador a nivel de dispositivo si existe)
+    const activeDecoder = device.codecJs || decoderCode;
     const decodedPayload = payload.data
-      ? this.decoder.decode(payload.data, payload.fPort, decoderCode)
+      ? this.decoder.decode(payload.data, payload.fPort, activeDecoder)
       : null;
 
     const record = this.telemetryRepo.create({

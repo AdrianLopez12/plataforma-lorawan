@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import IntegrationPage from './pages/IntegrationPage';
 import ClientsPage from './pages/ClientsPage';
 import UsersPage from './pages/UsersPage';
+import AuditPage from './pages/AuditPage';
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/integration" element={<IntegrationPage />} />
             <Route path="/clients" element={<AdminGuard><ClientsPage /></AdminGuard>} />
             <Route path="/users" element={<AdminGuard><UsersPage /></AdminGuard>} />
+            <Route path="/audit" element={<AdminGuard><AuditPage /></AdminGuard>} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

@@ -28,10 +28,29 @@ export class DevicesService {
         console.warn('Error al buscar integración para heredar organizationId:', e);
       }
 
+      // Zero-Touch Auto-Provisioning
+      const isSmartBin = devEUI.startsWith('BB') || devEUI.startsWith('BC') || devEUI.toLowerCase().includes('bin');
+      const guessedType = isSmartBin ? 'smart_bin' : 'water_meter';
+      const displayName = guessedType === 'water_meter' 
+        ? `Medidor Autoprovisto ${devEUI.substring(0, 6)}` 
+        : `Contenedor Autoprovisto ${devEUI.substring(0, 6)}`;
+
+      // Coordenadas esparcidas por Quito para el mapa Leaflet
+      const count = await this.deviceRepo.count();
+      const baseLat = -0.1950;
+      const baseLng = -78.4900;
+      const latOffset = 0.006 * (count + 1) * Math.sin(count);
+      const lngOffset = 0.006 * (count + 1) * Math.cos(count);
+
       device = this.deviceRepo.create({ 
         devEUI, 
         integrationId, 
-        organizationId: orgId 
+        organizationId: orgId,
+        deviceType: guessedType,
+        name: displayName,
+        lat: baseLat + latOffset,
+        lng: baseLng + lngOffset,
+        valveOpen: true,
       });
       await this.deviceRepo.save(device);
     } else if (integrationId && !device.integrationId) {

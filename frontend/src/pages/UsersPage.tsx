@@ -142,6 +142,10 @@ export default function UsersPage() {
       alert('No puedes eliminarte a ti mismo de la sesión actual.');
       return;
     }
+    if (u.role === 'superadmin') {
+      alert('Por motivos de seguridad, no está permitido eliminar a un Super Administrador.');
+      return;
+    }
     if (confirm(`¿Estás seguro de que deseas eliminar al usuario "${u.name}" (${u.email})?`)) {
       deleteUser(u.id);
     }
@@ -322,8 +326,8 @@ export default function UsersPage() {
                         onClick={() => handleDeleteClick(u)}
                         className="ack-btn" 
                         style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', color: 'var(--red)', borderColor: 'rgba(163,45,45,0.2)' }}
-                        title="Eliminar usuario"
-                        disabled={u.id === activeSessionUser?.id}
+                        title={u.role === 'superadmin' ? "No se puede eliminar un Super Administrador" : "Eliminar usuario"}
+                        disabled={u.id === activeSessionUser?.id || u.role === 'superadmin'}
                       >
                         <Trash2 size={12} />
                       </button>
