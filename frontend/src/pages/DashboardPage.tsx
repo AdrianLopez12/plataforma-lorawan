@@ -951,19 +951,6 @@ export default function DashboardPage() {
     saveDashboards(updated);
   };
 
-  const handleResizeWidgetHeight = (widgetId: string, height: 'short' | 'medium' | 'tall' | 'extra-tall') => {
-    const updated = dashboards.map(dash => {
-      if (dash.id === activeTab) {
-        return {
-          ...dash,
-          widgets: dash.widgets.map(w => w.id === widgetId ? { ...w, height, heightPx: undefined } : w)
-        };
-      }
-      return dash;
-    });
-    saveDashboards(updated);
-  };
-
   const handleResizeStart = (e: React.PointerEvent, widget: DashboardWidget) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2253,76 +2240,33 @@ export default function DashboardPage() {
                         minHeight: 0,
                         display: 'flex',
                         flexDirection: 'column',
-                        justifyContent: widget.type === 'map' ? 'stretch' : 'center',
-                        paddingBottom: isEditing ? (widget.type === 'map' ? 0 : 36) : 0
+                        justifyContent: widget.type === 'map' ? 'stretch' : 'center'
                       }}>
                         {renderWidgetContent(widget)}
                       </div>
 
                       {isEditing && (
-                        <div style={{
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '4px 8px 4px 10px',
-                          background: 'rgba(248,250,252,0.95)',
-                          borderTop: '1px solid var(--color-border)',
-                          borderBottomLeftRadius: 18,
-                          borderBottomRightRadius: 18,
-                          zIndex: 20,
-                          gap: 6
-                        }}>
-                          {/* Botones de altura */}
-                          <div style={{ display: 'flex', gap: 3 }}>
-                            {(['short','medium','tall','extra-tall'] as const).map(h => {
-                              const labels: Record<string, string> = { short: 'S', medium: 'M', tall: 'L', 'extra-tall': 'XL' };
-                              const active = (widget.height || 'medium') === h;
-                              return (
-                                <button
-                                  key={h}
-                                  onPointerDown={e => e.stopPropagation()}
-                                  onClick={e => { e.stopPropagation(); handleResizeWidgetHeight(widget.id, h); }}
-                                  title={h}
-                                  style={{
-                                    padding: '2px 7px',
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    borderRadius: 5,
-                                    border: active ? '1.5px solid var(--teal)' : '1px solid var(--color-border)',
-                                    background: active ? 'var(--teal-bg)' : 'white',
-                                    color: active ? 'var(--teal-dark)' : 'var(--color-muted)',
-                                    cursor: 'pointer',
-                                    lineHeight: '16px'
-                                  }}
-                                >
-                                  {labels[h]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {/* Handle de resize de ancho (esquina inferior derecha) */}
-                          <div 
-                            onPointerDown={(e) => handleResizeStart(e, widget)}
-                            style={{
-                              width: '20px',
-                              height: '20px',
-                              cursor: 'se-resize',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0
-                            }}
-                            title="Arrastrar para cambiar ancho"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" strokeWidth="1.5" strokeLinecap="round">
-                              <line x1="2" y1="8" x2="8" y2="2" />
-                              <line x1="5" y1="8" x2="8" y2="5" />
-                            </svg>
-                          </div>
+                        <div
+                          onPointerDown={(e) => handleResizeStart(e, widget)}
+                          style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            width: '22px',
+                            height: '22px',
+                            cursor: 'se-resize',
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            justifyContent: 'flex-end',
+                            padding: '4px',
+                            zIndex: 25
+                          }}
+                          title="Arrastrar para redimensionar"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" strokeWidth="1.5" strokeLinecap="round">
+                            <line x1="2" y1="8" x2="8" y2="2" />
+                            <line x1="5" y1="8" x2="8" y2="5" />
+                          </svg>
                         </div>
                       )}
                     </div>
