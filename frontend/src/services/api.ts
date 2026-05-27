@@ -16,6 +16,11 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
+      const token = localStorage.getItem('token');
+      if (token && token.startsWith('mock-token-')) {
+        console.warn('JWT 401 guard ignore for mock/simulation session token.');
+        return Promise.reject(err);
+      }
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
