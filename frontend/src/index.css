@@ -922,6 +922,96 @@ select.form-input {
 }
 
 /* ==========================================================================
+   CUSTOM DASHBOARDS LIST (GLOW ROW ITEMS)
+   ========================================================================== */
+.dashboards-container {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.dash-row-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.dash-row-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
+  cursor: pointer;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dash-row-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.08);
+  border-color: rgba(29, 158, 117, 0.25);
+}
+
+.dash-row-card:hover .enter-arrow {
+  transform: translateX(4px);
+  color: var(--teal);
+}
+
+.enter-arrow {
+  color: var(--color-hint);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.dash-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.01);
+}
+
+.dash-action-btn:hover {
+  transform: scale(1.05);
+}
+
+.dash-action-btn.edit:hover {
+  border-color: var(--teal);
+  color: var(--teal-dark);
+  background: var(--teal-bg);
+}
+
+.dash-action-btn.delete {
+  color: var(--red);
+}
+
+.dash-action-btn.delete:hover {
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+
+/* ==========================================================================
    DEVELOPER PLAYGROUND & RETRO TERMINAL SHELL
    ========================================================================== */
 .playground-terminal {
