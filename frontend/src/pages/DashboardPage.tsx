@@ -1399,9 +1399,13 @@ export default function DashboardPage() {
           ? [Number(devicesWithCoords[0].lat), Number(devicesWithCoords[0].lng)] 
           : [-0.1950, -78.4900];
 
-        // Usar una clave dinámica única basada en el widget ID, el número de dispositivos y el centro 
-        // para forzar a Leaflet a desmontarse y recrearse limpiamente, evitando el error "Map container is already initialized"
-        const mapKey = `map-${widget.id}-${devicesWithCoords.length}-${mapCenter[0]}-${mapCenter[1]}`;
+        // Obtener el índice del widget en el dashboard activo
+        const widgetsList = activeDashboard?.widgets || [];
+        const widgetIdx = widgetsList.findIndex(w => w.id === widget.id);
+
+        // Usar una clave dinámica única basada en el widget ID, su índice en el arreglo, el número de dispositivos y el centro 
+        // para forzar a Leaflet a desmontarse y recrearse limpiamente en su nueva posición en el DOM, evitando que crasheé
+        const mapKey = `map-${widget.id}-${widgetIdx}-${devicesWithCoords.length}-${mapCenter[0]}-${mapCenter[1]}`;
 
         return (
           <div style={{
