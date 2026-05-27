@@ -963,7 +963,6 @@ export default function DashboardPage() {
     const cardRect = cardElement.getBoundingClientRect();
     const gridRect = gridElement.getBoundingClientRect();
     
-    // Ancho de columna medido restando espacios entre columnas (gap de 24px)
     const singleColWidth = (gridRect.width - 11 * 24) / 12;
     
     const startWidth = cardRect.width;
@@ -978,11 +977,9 @@ export default function DashboardPage() {
       const newWidth = startWidth + deltaX;
       const newHeight = startHeight + deltaY;
       
-      // Snapping dinámico de columnas (de 2 a 12)
       const computedCols = Math.round((newWidth + 24) / (singleColWidth + 24));
       const gridCols = Math.max(2, Math.min(12, computedCols));
       
-      // Clamping de altura
       const minHeight = widget.type === 'kpi' ? 110 : 180;
       const heightPx = Math.max(minHeight, Math.min(1000, newHeight));
       
@@ -1005,27 +1002,58 @@ export default function DashboardPage() {
     window.addEventListener('pointerup', handlePointerUp);
   };
 
-  // ------------------------------------------------------------------
-  // DRAG & DROP: usa pointermove + elementFromPoint para NO re-renderizar
-  // durante el arrastre. El swap se hace UNA sola vez en pointerup.
-  // ------------------------------------------------------------------
+  // # Plan de Reordenamiento Dinámico Avanzado y Llenado Automático de Espacios Vacíos (Dense CSS Grid)
+  // Este plan detalla la solución definitiva para el movimiento de paneles en el dashboard. 
+  // Implementa un sistema de arrastre basado en inserción por proximidad (reordering) 
+  // combinado con un flujo denso en la cuadrícula CSS (gridAutoFlow: 'dense').
+
   const handleDragStart = (e: React.PointerEvent, widgetId: string) => {
     if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
     setDraggingWidgetId(widgetId);
 
     let overIdLocal: string | null = null;
+    let insertAfterLocal = false;
 
     const handlePointerMove = (mv: PointerEvent) => {
-      // La tarjeta arrastrada tiene pointerEvents:'none', así elementFromPoint
-      // la ignora y ve la tarjeta de debajo.
-      const el = document.elementFromPoint(mv.clientX, mv.clientY);
-      const card = el?.closest('[data-widget-id]') as HTMLElement | null;
-      const overId = card?.dataset.widgetId ?? null;
-      const newOver = (overId && overId !== widgetId) ? overId : null;
-      if (newOver !== overIdLocal) {
-        overIdLocal = newOver;
-        setDragOverWidgetId(newOver);
+      const x = mv.clientX;
+      const y = mv.clientY;
+
+      const cards = Array.from(document.querySelectorAll('[data-widget-id]')) as HTMLElement[];
+      const otherCards = cards.filter(c => c.dataset.widgetId !== widgetId);
+
+      if (otherCards.length === 0) return;
+
+      let closestCard: HTMLElement | null = null;
+      let minDistance = Infinity;
+
+      for (const card of otherCards) {
+        const rect = card.getBoundingClientRect();
+        const closestX = Math.max(rect.left, Math.min(x, rect.right));
+        const closestY = Math.max(rect.top, Math.min(y, rect.bottom));
+        const dx = x - closestX;
+        const dy = y - closestY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestCard = card;
+        }
+      }
+
+      if (closestCard) {
+        const overId = closestCard.dataset.widgetId ?? null;
+        if (overId !== overIdLocal) {
+          overIdLocal = overId;
+          setDragOverWidgetId(overId);
+        }
+        const rect = closestCard.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        insertAfterLocal = (y > centerY + 20) || (y > rect.top - 15 && y < rect.bottom + 15 && x > centerX);
+      } else if (overIdLocal !== null) {
+        overIdLocal = null;
+        setDragOverWidgetId(null);
       }
     };
 
@@ -1033,7 +1061,6 @@ export default function DashboardPage() {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
 
-      // Swap en pointerup — sólo una vez, sin re-renders intermedios
       if (overIdLocal && overIdLocal !== widgetId) {
         setDashboards(prev => {
           const updated = prev.map(dash => {
@@ -1042,9 +1069,10 @@ export default function DashboardPage() {
             const dragIdx = widgets.findIndex(w => w.id === widgetId);
             const targetIdx = widgets.findIndex(w => w.id === overIdLocal);
             if (dragIdx !== -1 && targetIdx !== -1) {
-              const tmp = widgets[dragIdx];
-              widgets[dragIdx] = widgets[targetIdx];
-              widgets[targetIdx] = tmp;
+              const [draggedWidget] = widgets.splice(dragIdx, 1);
+              let insertIdx = widgets.findIndex(w => w.id === overIdLocal);
+              if (insertAfterLocal) insertIdx += 1;
+              widgets.splice(insertIdx, 0, draggedWidget);
             }
             return { ...dash, widgets };
           });
@@ -1052,7 +1080,6 @@ export default function DashboardPage() {
           return updated;
         });
       }
-
       setDraggingWidgetId(null);
       setDragOverWidgetId(null);
       overIdLocal = null;
@@ -2157,6 +2184,7 @@ export default function DashboardPage() {
                 style={{ 
                   display: 'grid', 
                   gridTemplateColumns: 'repeat(12, 1fr)', 
+                  gridAutoFlow: 'dense',
                   gap: '24px',
                   alignItems: 'start'
                 }}
