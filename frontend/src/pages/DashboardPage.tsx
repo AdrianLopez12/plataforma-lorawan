@@ -538,7 +538,7 @@ export default function DashboardPage() {
       saveGroups([...deviceGroups, newGroup]);
     } else if (groupDrawerMode === 'edit' && editingGroup) {
       saveGroups(deviceGroups.map(g => g.id === editingGroup.id
-        ? { ...g, name: groupName.trim(), deviceType: groupType, deviceEUIs: groupSelectedDevices }
+        ? { ...g, name: groupName.trim(), deviceType: groupType, deviceEUIs: groupSelectedDevices, organizationId: groupOrgId }
         : g
       ));
     }
