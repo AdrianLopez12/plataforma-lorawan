@@ -15,6 +15,7 @@ import { IntegrationModule } from './integration/integration.module';
 import { AuthModule } from './auth/auth.module';
 import { AuditLogModule } from './common/audit-log.module';
 import { RuleChainModule } from './rule-chain/rule-chain.module';
+import { ExternalApiModule } from './external-api/external-api.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { RuleChainModule } from './rule-chain/rule-chain.module';
     IntegrationModule,
     AuthModule,
     RuleChainModule,
+    ExternalApiModule,
   ],
 })
 export class AppModule {}

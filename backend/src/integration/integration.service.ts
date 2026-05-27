@@ -126,4 +126,8 @@ function decode(bytes, port) {
     const integration = await this.findOne(id);
     await this.integrationRepo.remove(integration);
   }
+
+  async findBySecret(secret: string): Promise<Integration | null> {
+    return this.integrationRepo.findOne({ where: { secret } });
+  }
 }
