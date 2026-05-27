@@ -1326,7 +1326,15 @@ export default function DashboardPage() {
           : [-0.1950, -78.4900];
 
         return (
-          <div style={{ position: 'absolute', inset: 0, top: 44, bottom: isEditing ? 32 : 0, borderRadius: '0 0 18px 18px', overflow: 'hidden', border: '0.5px solid var(--color-border)' }}>
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            borderRadius: 10,
+            overflow: 'hidden',
+            marginTop: 8,
+            border: '1px solid var(--color-border)',
+            boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.04)'
+          }}>
             <MapContainer center={mapCenter} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false}>
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
@@ -2240,7 +2248,14 @@ export default function DashboardPage() {
                         )}
                       </div>
                       
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: widget.type === 'map' ? 'stretch' : 'center', paddingBottom: isEditing ? 40 : 0 }}>
+                      <div style={{
+                        flex: 1,
+                        minHeight: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: widget.type === 'map' ? 'stretch' : 'center',
+                        paddingBottom: isEditing ? (widget.type === 'map' ? 0 : 36) : 0
+                      }}>
                         {renderWidgetContent(widget)}
                       </div>
 
