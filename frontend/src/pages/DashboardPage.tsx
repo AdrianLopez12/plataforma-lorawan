@@ -2390,6 +2390,7 @@ export default function DashboardPage() {
                     className="card" 
                     style={{ 
                       gridColumn: 'span 4',
+                      gridRow: 'span 6',
                       display: 'flex', 
                       flexDirection: 'column', 
                       alignItems: 'center', 
@@ -2398,6 +2399,7 @@ export default function DashboardPage() {
                       borderWidth: '2px', 
                       borderColor: 'var(--teal)',
                       cursor: 'pointer',
+                      height: '180px',
                       minHeight: '180px',
                       transition: 'all 0.2s',
                       background: 'var(--color-surface)',
