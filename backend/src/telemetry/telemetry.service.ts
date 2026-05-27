@@ -29,22 +29,32 @@ export class TelemetryService {
    * }
    * Ajusta los campos si tu versión de KORE usa nombres distintos.
    */
-  async saveUplink(payload: any, integrationId?: string, decoderCode?: string): Promise<TelemetryRecord> {
-    // Registrar el device si es la primera vez que lo vemos
+  /**
+   * Decodifica un uplink recibido desde Tektelic KORE y busca/crea el dispositivo asociado.
+   */
+  async decodeUplink(payload: any, integrationId?: string, decoderCode?: string): Promise<{ device: any; decodedPayload: any }> {
     const device = await this.devicesService.findOrCreate(payload.devEUI, integrationId);
+    const activeDecoder = device.codecJs || decoderCode;
+    const decodedPayload = payload.data
+      ? this.decoder.decode(payload.data, payload.fPort, activeDecoder)
+      : null;
+    return { device, decodedPayload };
+  }
 
-    // Extraer datos de señal del primer gateway
+  /**
+   * Guarda un uplink con su carga útil ya decodificada en la base de datos de telemetría.
+   */
+  async saveUplinkWithDecoded(
+    payload: any,
+    device: any,
+    decodedPayload: any,
+    integrationId?: string,
+  ): Promise<TelemetryRecord> {
     const rxInfo = payload.rxInfo?.[0] ?? {};
     const spreadingFactor =
       payload.txInfo?.dataRate?.spreadFactor ??
       payload.txInfo?.dataRate?.spreadingFactor ??
       null;
-
-    // Decodificar payload (prioriza el decodificador a nivel de dispositivo si existe)
-    const activeDecoder = device.codecJs || decoderCode;
-    const decodedPayload = payload.data
-      ? this.decoder.decode(payload.data, payload.fPort, activeDecoder)
-      : null;
 
     const record = this.telemetryRepo.create({
       devEUI: payload.devEUI,
@@ -62,9 +72,17 @@ export class TelemetryService {
 
     const saved = await this.telemetryRepo.save(record) as TelemetryRecord;
     this.logger.log(
-      `Guardado: devEUI=${saved.devEUI} fPort=${saved.fPort} integrationId=${integrationId} decoded=${JSON.stringify(decodedPayload)}`,
+      `Guardado (Con Desvío): devEUI=${saved.devEUI} fPort=${saved.fPort} integrationId=${integrationId} decoded=${JSON.stringify(decodedPayload)}`,
     );
     return saved;
+  }
+
+  /**
+   * Procesa un uplink recibido desde Tektelic KORE (Flujo directo tradicional).
+   */
+  async saveUplink(payload: any, integrationId?: string, decoderCode?: string): Promise<TelemetryRecord> {
+    const { device, decodedPayload } = await this.decodeUplink(payload, integrationId, decoderCode);
+    return this.saveUplinkWithDecoded(payload, device, decodedPayload, integrationId);
   }
 
   async findByDevice(devEUI: string, limit = 100): Promise<TelemetryRecord[]> {

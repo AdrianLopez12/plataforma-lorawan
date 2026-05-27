@@ -174,3 +174,14 @@ export interface AlertRule {
   organizationId: string;   // Aislamiento multi-tenant
   createdAt: string;
 }
+
+export interface RuleChain {
+  id: string;
+  name: string;
+  description?: string;
+  graph: any;
+  active: boolean;
+  organizationId?: string;
+  createdAt: string;
+  updatedAt: string;
+}

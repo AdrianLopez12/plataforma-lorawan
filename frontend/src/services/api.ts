@@ -88,6 +88,13 @@ export const sendDownlink = (devEUI: string, command: 'open' | 'close') =>
 // Audit Logs
 export const getAuditLogs = () => api.get('/audit-logs').then((r) => r.data);
 
+// Rule Chains
+export const getRuleChains = () => api.get('/rule-chains').then((r) => r.data);
+export const getRuleChain = (id: string) => api.get(`/rule-chains/${id}`).then((r) => r.data);
+export const createRuleChain = (data: any) => api.post('/rule-chains', data).then((r) => r.data);
+export const updateRuleChain = (id: string, data: any) => api.put(`/rule-chains/${id}`, data).then((r) => r.data);
+export const deleteRuleChain = (id: string) => api.delete(`/rule-chains/${id}`).then((r) => r.data);
+
 // Webhook & Decoder
 export const getWebhookConfig = () => api.get('/webhook/config').then((r) => r.data);
 export const getDecoderCode = () => api.get('/telemetry/decoder').then((r) => r.data);
