@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Droplets, Trash2, Plus, Settings,
   Trash, Cpu, Gauge, Map as MapIcon, Thermometer,
@@ -156,8 +156,7 @@ export default function DashboardPage() {
   // Drag & Resize states for custom dashboard grid
   const [tempResizing, setTempResizing] = useState<{ id: string; gridCols: number; heightPx: number } | null>(null);
   const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null);
-  // Ref para debounce de intercambios de paneles (evita loop infinito de re-renders)
-  const lastSwapRef = useRef<{ pair: string; ts: number }>({ pair: '', ts: 0 });
+  const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
   
   // Modals & Drawer
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -1006,44 +1005,61 @@ export default function DashboardPage() {
     window.addEventListener('pointerup', handlePointerUp);
   };
 
+  // ------------------------------------------------------------------
+  // DRAG & DROP: usa pointermove + elementFromPoint para NO re-renderizar
+  // durante el arrastre. El swap se hace UNA sola vez en pointerup.
+  // ------------------------------------------------------------------
   const handleDragStart = (e: React.PointerEvent, widgetId: string) => {
     if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
     setDraggingWidgetId(widgetId);
-    
-    const handleGlobalPointerUp = () => {
-      setDraggingWidgetId(null);
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
-    };
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-  };
 
-  const handleCardPointerEnter = (targetWidgetId: string) => {
-    if (!draggingWidgetId || draggingWidgetId === targetWidgetId) return;
+    let overIdLocal: string | null = null;
 
-    // Debounce: ignorar si ya intercambiamos este mismo par en los últimos 400 ms
-    const pair = [draggingWidgetId, targetWidgetId].sort().join('|');
-    const now = Date.now();
-    if (lastSwapRef.current.pair === pair && now - lastSwapRef.current.ts < 400) return;
-    lastSwapRef.current = { pair, ts: now };
-
-    const updated = dashboards.map(dash => {
-      if (dash.id === activeTab) {
-        const widgets = [...dash.widgets];
-        const dragIdx = widgets.findIndex(w => w.id === draggingWidgetId);
-        const targetIdx = widgets.findIndex(w => w.id === targetWidgetId);
-        
-        if (dragIdx !== -1 && targetIdx !== -1) {
-          // Intercambiar posiciones
-          const temp = widgets[dragIdx];
-          widgets[dragIdx] = widgets[targetIdx];
-          widgets[targetIdx] = temp;
-        }
-        return { ...dash, widgets };
+    const handlePointerMove = (mv: PointerEvent) => {
+      // La tarjeta arrastrada tiene pointerEvents:'none', así elementFromPoint
+      // la ignora y ve la tarjeta de debajo.
+      const el = document.elementFromPoint(mv.clientX, mv.clientY);
+      const card = el?.closest('[data-widget-id]') as HTMLElement | null;
+      const overId = card?.dataset.widgetId ?? null;
+      const newOver = (overId && overId !== widgetId) ? overId : null;
+      if (newOver !== overIdLocal) {
+        overIdLocal = newOver;
+        setDragOverWidgetId(newOver);
       }
-      return dash;
-    });
-    
-    saveDashboards(updated);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+
+      // Swap en pointerup — sólo una vez, sin re-renders intermedios
+      if (overIdLocal && overIdLocal !== widgetId) {
+        setDashboards(prev => {
+          const updated = prev.map(dash => {
+            if (dash.id !== activeTab) return dash;
+            const widgets = [...dash.widgets];
+            const dragIdx = widgets.findIndex(w => w.id === widgetId);
+            const targetIdx = widgets.findIndex(w => w.id === overIdLocal);
+            if (dragIdx !== -1 && targetIdx !== -1) {
+              const tmp = widgets[dragIdx];
+              widgets[dragIdx] = widgets[targetIdx];
+              widgets[targetIdx] = tmp;
+            }
+            return { ...dash, widgets };
+          });
+          localStorage.setItem('custom_dashboards', JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      setDraggingWidgetId(null);
+      setDragOverWidgetId(null);
+      overIdLocal = null;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
   };
 
   const renderDashboardIcon = (iconName: string, size = 18) => {
@@ -2164,13 +2180,15 @@ export default function DashboardPage() {
                     return '340px'; // 'medium'
                   })());
 
-                  const isDragging = draggingWidgetId === widget.id;
+                  const isDragging  = draggingWidgetId === widget.id;
+                  const isDropTarget = dragOverWidgetId === widget.id;
 
                   return (
-                    <div 
-                      key={widget.id} 
-                      className="card animate-fade-in" 
-                      style={{ 
+                    <div
+                      key={widget.id}
+                      data-widget-id={widget.id}
+                      className="card animate-fade-in"
+                      style={{
                         gridColumn: `span ${currentCols}`,
                         position: 'relative',
                         display: 'flex',
@@ -2178,17 +2196,15 @@ export default function DashboardPage() {
                         height: currentHeight,
                         minHeight: widget.type === 'kpi' ? 'auto' : '180px',
                         overflow: 'hidden',
-                        transition: draggingWidgetId ? 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' : 'all 0.3s ease',
-                        opacity: isDragging ? 0.4 : 1,
-                        transform: isDragging ? 'scale(0.97)' : 'none',
-                        boxShadow: isDragging ? '0 20px 25px -5px rgba(0, 0, 0, 0.1)' : 'none',
-                        border: isDragging ? '2px dashed var(--teal)' : undefined,
-                        zIndex: isDragging ? 30 : 1
-                      }}
-                      onPointerEnter={() => {
-                        if (isEditing) {
-                          handleCardPointerEnter(widget.id);
-                        }
+                        transition: draggingWidgetId ? 'box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease' : 'all 0.3s ease',
+                        opacity: isDragging ? 0.35 : 1,
+                        pointerEvents: isDragging ? 'none' : undefined,
+                        outline: isDropTarget ? '2.5px solid var(--teal)' : isDragging ? '2px dashed var(--color-border)' : 'none',
+                        outlineOffset: '2px',
+                        boxShadow: isDropTarget
+                          ? '0 0 0 4px var(--teal-bg), 0 8px 24px rgba(29,158,117,0.18)'
+                          : undefined,
+                        zIndex: isDropTarget ? 10 : 1
                       }}
                     >
                       <div 
