@@ -4,7 +4,8 @@ import {
   Trash, Cpu, Gauge, Map as MapIcon, Thermometer,
   Battery, Wind, X, LayoutDashboard, Activity, ArrowLeft,
   Zap, Lightbulb, Database, Waves, LineChart as LineChartIcon, BarChart3,
-  RefreshCw, Shield, Calendar, ChevronLeft, ChevronRight, MapPin
+  RefreshCw, Shield, Calendar, ChevronLeft, ChevronRight, MapPin,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, Legend } from 'recharts';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -150,6 +151,28 @@ export default function DashboardPage() {
   // Dashboard states
   const [dashboards, setDashboards] = useState<CustomDashboard[]>([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Pantalla Completa State & Sync Lógica
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch((err) => console.error("Error al activar pantalla completa:", err));
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Reloj dinámico de 10 segundos para actualizar las consultas de telemetría en tiempo real
   useEffect(() => {
@@ -1417,7 +1440,7 @@ export default function DashboardPage() {
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis domain={[0, widget.metricKey === 'fillLevel' ? 100 : 'auto']} tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(v: any) => [`${v} ${widget.metricUnit}`, widget.title]} />
-                  <Bar dataKey="val" fill={colorHex} radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 9 }} />
+                  <Bar dataKey="val" fill={colorHex} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -1856,83 +1879,108 @@ export default function DashboardPage() {
 
       {/* VISTA 2: LIENZO DEL DASHBOARD SELECCIONADO */}
       {activeTab !== 'list' && activeDashboard && (
-        <div>
+        <div className={isFullscreen ? 'dashboard-fullscreen-active' : ''}>
+          {/* Botón flotante para salir de pantalla completa (Modo NOC) */}
+          {isFullscreen && (
+            <button
+              onClick={toggleFullscreen}
+              className="fullscreen-exit-btn animate-fade-in"
+              title="Salir de pantalla completa"
+            >
+              <Minimize2 size={18} />
+            </button>
+          )}
+
           {/* Cabecera del Lienzo con Botón de Regresar */}
-          <div className="page-header" style={{ marginBottom: 24, borderBottom: '0.5px solid var(--color-border)', paddingBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <button 
-                className="btn-secondary" 
-                onClick={() => { setActiveTab('list'); setIsEditing(false); }}
-                style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
-                title="Volver a la lista de dashboards"
-              >
-                <ArrowLeft size={16} />
-                <span>Volver</span>
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 8,
-                  background: 'var(--teal-bg)',
-                  color: 'var(--teal-dark)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  {renderDashboardIcon(activeDashboard.icon, 18)}
-                </div>
-                <div>
-                  <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>{activeDashboard.name}</h2>
-                  <p className="page-subtitle" style={{ margin: 0, marginTop: 2 }}>Visualización activa · {activeDashboard.widgets.length} paneles</p>
+          {!isFullscreen && (
+            <div className="page-header" style={{ marginBottom: 24, borderBottom: '0.5px solid var(--color-border)', paddingBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => { setActiveTab('list'); setIsEditing(false); }}
+                  style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
+                  title="Volver a la lista de dashboards"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Volver</span>
+                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: 'var(--teal-bg)',
+                    color: 'var(--teal-dark)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {renderDashboardIcon(activeDashboard.icon, 18)}
+                  </div>
+                  <div>
+                    <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>{activeDashboard.name}</h2>
+                    <p className="page-subtitle" style={{ margin: 0, marginTop: 2 }}>Visualización activa · {activeDashboard.widgets.length} paneles</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button 
-                className={`btn-secondary ${isEditing ? 'active' : ''}`}
-                onClick={() => setIsEditing(!isEditing)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <Settings size={16} />
-                <span>{isEditing ? 'Bloquear Edición' : 'Editar Tablero'}</span>
-              </button>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Botón Pantalla Completa */}
+                <button 
+                  className={`btn-secondary ${isFullscreen ? 'active' : ''}`}
+                  onClick={toggleFullscreen}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  title={isFullscreen ? "Salir de pantalla completa" : "Ver en pantalla completa"}
+                >
+                  {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  <span>{isFullscreen ? 'Salir Completa' : 'Pantalla Completa'}</span>
+                </button>
 
-              <button 
-                className="btn-primary" 
-                onClick={handleOpenAddDrawer}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <Plus size={16} />
-                <span>Agregar Panel</span>
-              </button>
+                <button 
+                  className={`btn-secondary ${isEditing ? 'active' : ''}`}
+                  onClick={() => setIsEditing(!isEditing)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Settings size={16} />
+                  <span>{isEditing ? 'Bloquear Edición' : 'Editar Tablero'}</span>
+                </button>
+
+                <button 
+                  className="btn-primary" 
+                  onClick={handleOpenAddDrawer}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Plus size={16} />
+                  <span>Agregar Panel</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Barra de Filtro de Tiempo Premium (Glassmorphic) */}
-          <div style={{
-            position: 'relative',
-            zIndex: showCalendarPopover ? 1000 : 10,
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            padding: '12px 18px',
-            background: 'rgba(255, 255, 255, 0.45)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            marginBottom: '20px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                Rango Temporal:
-              </span>
+          {!isFullscreen && (
+            <div style={{
+              position: 'relative',
+              zIndex: showCalendarPopover ? 1000 : 10,
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '12px 18px',
+              background: 'rgba(255, 255, 255, 0.45)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              marginBottom: '20px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  Rango Temporal:
+                </span>
               <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px', border: '0.5px solid var(--color-border)' }}>
                 {(['2h', '4h', '24h', 'custom'] as const).map((filter) => (
                   <button
@@ -2247,6 +2295,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Lienzo del Dashboard */}
           <div>

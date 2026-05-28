@@ -225,15 +225,60 @@ export default function RuleChainDesignerPage() {
       })
       .catch((err) => {
         console.warn('Error fetching rule chain, using fallback simulation:', err);
+        
+        // Cargar desde localStorage si existe un respaldo previo de esta simulación
+        const localSaved = localStorage.getItem(`rule_chain_local_${id}`);
+        let localGraph = null;
+        if (localSaved) {
+          try {
+            localGraph = JSON.parse(localSaved);
+          } catch (e) {
+            console.error('Error al parsear el grafo guardado localmente:', e);
+          }
+        }
+
+        // Buscar si existe esta regla en simulated_rule_chains en localStorage
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        let simulatedName = 'Procesamiento de Agua Principal';
+        let simulatedDesc = 'Filtra caudales altos, registra en base de datos e inunda válvulas si hay fugas.';
+        let simulatedOrg = undefined;
+        let simulatedActive = true;
+        
+        if (storedSimulated) {
+          try {
+            const list: RuleChain[] = JSON.parse(storedSimulated);
+            const matched = list.find(c => c.id === id);
+            if (matched) {
+              simulatedName = matched.name;
+              simulatedDesc = matched.description || '';
+              simulatedOrg = matched.organizationId;
+              simulatedActive = matched.active;
+            } else if (id === 'rc_bins') {
+              simulatedName = 'Flota SmartBins Rival';
+              simulatedDesc = 'Enruta telemetría volumétrica y enciende alarmas al superar el 85% de capacidad.';
+              simulatedActive = false;
+            }
+          } catch (e) {
+            console.error('Error parsing simulated_rule_chains list:', e);
+          }
+        } else {
+          if (id === 'rc_bins') {
+            simulatedName = 'Flota SmartBins Rival';
+            simulatedDesc = 'Enruta telemetría volumétrica y enciende alarmas al superar el 85% de capacidad.';
+            simulatedActive = false;
+          }
+        }
+
         // Fallback Premium Offline
         const mockChain: RuleChain = {
           id: id || 'rc_mock',
-          name: 'Procesamiento de Agua Principal',
-          description: 'Filtra caudales altos, registra en base de datos e inunda válvulas si hay fugas.',
-          active: true,
+          name: simulatedName,
+          description: simulatedDesc,
+          active: simulatedActive,
+          organizationId: simulatedOrg,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          graph: {
+          graph: localGraph || {
             nodes: [
               { id: 'n1', type: 'input', position: { x: 100, y: 150 }, data: { label: 'Entrada LoRaWAN' } },
               { id: 'n2', type: 'filter', position: { x: 300, y: 130 }, data: { label: 'Evaluar Fuga', expression: 'payload.flow > 4.5' } },
@@ -339,14 +384,51 @@ export default function RuleChainDesignerPage() {
   const handleSave = () => {
     if (!chain) return;
     setSaving(true);
+
+    const graphData = { nodes, edges };
+
+    // Guardar respaldo local en localStorage siempre, por seguridad y soporte offline robusto
+    localStorage.setItem(`rule_chain_local_${chain.id}`, JSON.stringify(graphData));
+
     updateRuleChain(chain.id, {
-      graph: { nodes, edges }
+      graph: graphData
     })
       .then(() => {
         alert('Estructura de la Cadena de Reglas guardada exitosamente.');
       })
       .catch((err) => {
         console.warn('API error, simulated local save:', err);
+        
+        // Guardar también en la lista de simulated_rule_chains
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        if (storedSimulated) {
+          try {
+            let list: RuleChain[] = JSON.parse(storedSimulated);
+            const idx = list.findIndex(c => c.id === chain.id);
+            if (idx !== -1) {
+              list[idx].graph = graphData;
+              list[idx].updatedAt = new Date().toISOString();
+              localStorage.setItem('simulated_rule_chains', JSON.stringify(list));
+            } else {
+              // Si no existía (era una default de fallback), la agregamos a simulated
+              list.push({
+                ...chain,
+                graph: graphData,
+                updatedAt: new Date().toISOString()
+              });
+              localStorage.setItem('simulated_rule_chains', JSON.stringify(list));
+            }
+          } catch (e) {
+            console.error('Error updating rule chain inside simulated_rule_chains:', e);
+          }
+        } else {
+          localStorage.setItem('simulated_rule_chains', JSON.stringify([{
+            ...chain,
+            graph: graphData,
+            updatedAt: new Date().toISOString()
+          }]));
+        }
+
         alert('[Simulación] Cambios del lienzo guardados localmente con éxito.');
       })
       .finally(() => setSaving(false));

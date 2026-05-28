@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Droplets, Trash2, Wifi, WifiOff, Search, Cpu, RefreshCw,
   Shield, Thermometer, Activity, Battery, Clock, Database, X, Radio, AlertTriangle,
-  Edit, Check, Settings
+  Edit, Check, Settings, Building
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -16,6 +16,34 @@ import { useAuth } from '../context/AuthContext';
 export default function DevicesPage() {
   const { user, clients } = useAuth();
 
+  // Helper de formateo de fechas a prueba de fallos
+  const safeFormatDate = (dateVal?: any, formatStr = 'dd/MM/yyyy HH:mm:ss', fallback = '—') => {
+    if (!dateVal) return fallback;
+    try {
+      const parsedDate = new Date(dateVal);
+      if (!isNaN(parsedDate.getTime())) {
+        return format(parsedDate, formatStr);
+      }
+    } catch (e) {
+      console.warn('Error formatting date:', e);
+    }
+    return fallback;
+  };
+
+  const formatInstallationDate = (dateStr?: string) => {
+    if (!dateStr || !dateStr.trim()) return 'No registrada';
+    try {
+      const cleanDateStr = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
+      const parsedDate = new Date(cleanDateStr);
+      if (!isNaN(parsedDate.getTime())) {
+        return format(parsedDate, 'dd/MM/yyyy');
+      }
+    } catch (e) {
+      console.warn('Error formatting installation date:', e);
+    }
+    return dateStr;
+  };
+
   const [devices, setDevices] = useState<Device[]>(MOCK_DEVICES);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<string>('all');
@@ -23,6 +51,30 @@ export default function DevicesPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'water_meter' | 'smartbin'>('all');
   const [loading, setLoading] = useState(true);
+  const [selectedFilterOrgId, setSelectedFilterOrgId] = useState('all');
+
+  // Resolver recursivamente todas las organizaciones descendientes (subclientes de subclientes)
+  const getDescendantOrgIds = (orgId: string): string[] => {
+    const ids: string[] = [orgId];
+    const getChildren = (id: string) => {
+      const children = clients.filter(c => c.parentId === id);
+      children.forEach(child => {
+        ids.push(child.id);
+        getChildren(child.id);
+      });
+    };
+    getChildren(orgId);
+    return ids;
+  };
+
+  const visibleOrgIds = user?.role === 'superadmin'
+    ? []
+    : (user?.organizationId ? getDescendantOrgIds(user.organizationId) : []);
+
+  const visibleClients = clients.filter(c => {
+    if (user?.role === 'superadmin') return true;
+    return visibleOrgIds.includes(c.id);
+  });
 
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [deviceTelemetryHistory, setDeviceTelemetryHistory] = useState<TelemetryRecord[]>([]);
@@ -197,8 +249,18 @@ export default function DevicesPage() {
     const nameStr = d.name || '';
     const matchSearch = nameStr.toLowerCase().includes(search.toLowerCase()) || d.devEUI.toLowerCase().includes(search.toLowerCase());
     const matchType = typeFilter === 'all' || d.deviceType === typeFilter;
+    
     if (user?.role !== 'superadmin') {
-      if (d.organizationId !== user?.organizationId) return false;
+      // Un cliente puede ver sus propios dispositivos y los de todos sus sub-clientes jerárquicos
+      if (selectedFilterOrgId !== 'all') {
+        if (d.organizationId !== selectedFilterOrgId) return false;
+      } else {
+        if (!visibleOrgIds.includes(d.organizationId || '')) return false;
+      }
+    } else {
+      if (selectedFilterOrgId !== 'all') {
+        if (d.organizationId !== selectedFilterOrgId) return false;
+      }
     }
     return matchSearch && matchType;
   });
@@ -246,6 +308,25 @@ export default function DevicesPage() {
               ))}
             </select>
           </div>
+
+          {(user?.role === 'superadmin' || visibleClients.length > 1) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Building size={14} className="text-muted" />
+              <select
+                className="form-input"
+                value={selectedFilterOrgId}
+                onChange={(e) => setSelectedFilterOrgId(e.target.value)}
+                style={{ width: 'auto', padding: '6px 12px', fontSize: 13, height: '36px' }}
+              >
+                <option value="all">{user?.role === 'superadmin' ? 'Todos los clientes' : 'Todos (Propios y Subclientes)'}</option>
+                {visibleClients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.id === user?.organizationId ? '(Tus Dispositivos)' : '(Subcliente)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="filter-tabs" style={{ margin: 0 }}>
@@ -278,7 +359,7 @@ export default function DevicesPage() {
                 <th>devEUI</th>
                 <th>Tipo</th>
                 <th>Estado</th>
-                {user?.role === 'superadmin' && <th>Cliente Asociado (Tenant)</th>}
+                {(user?.role === 'superadmin' || visibleClients.length > 1) && <th>Cliente Asociado (Tenant)</th>}
                 <th>Último dato</th>
                 <th>RSSI / SNR</th>
               </tr>
@@ -314,7 +395,7 @@ export default function DevicesPage() {
                       </span>
                     </td>
 
-                    {user?.role === 'superadmin' && (
+                    {(user?.role === 'superadmin' || visibleClients.length > 1) && (
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <Shield size={12} className="text-purple-500" />
@@ -325,7 +406,7 @@ export default function DevicesPage() {
                             className="form-input"
                             style={{ padding: '2px 6px', fontSize: 12, height: 26, width: 'auto', border: '0.5px solid var(--color-border)' }}
                           >
-                            {clients.map(c => (
+                            {visibleClients.map(c => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                           </select>
@@ -334,7 +415,7 @@ export default function DevicesPage() {
                     )}
 
                     <td className="table-muted">
-                      {d.lastTelemetry ? format(new Date(d.lastTelemetry.receivedAt), 'dd/MM HH:mm') : '—'}
+                      {d.lastTelemetry ? safeFormatDate(d.lastTelemetry.receivedAt, 'dd/MM HH:mm') : '—'}
                     </td>
                     <td className="table-muted">
                       {d.lastTelemetry ? `${d.lastTelemetry.rssi} dBm / ${d.lastTelemetry.snr} dB` : '—'}
@@ -410,8 +491,8 @@ export default function DevicesPage() {
                     const isWater = selectedDevice.deviceType === 'water_meter';
 
                     if (isWater) {
-                      const payload = latest.decodedPayload as any;
-                      const hasAlert = payload.alertLeak || payload.alertOverflow || payload.alertFrost || payload.alertTamper;
+                      const payload = (latest.decodedPayload as any) || {};
+                      const hasAlert = !!(payload.alertLeak || payload.alertOverflow || payload.alertFrost || payload.alertTamper);
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                           <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 0 }}>
@@ -467,7 +548,7 @@ export default function DevicesPage() {
                         </div>
                       );
                     } else {
-                      const payload = latest.decodedPayload as any;
+                      const payload = (latest.decodedPayload as any) || {};
                       const isFull = (payload.fillLevel ?? 0) >= 80;
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -563,7 +644,7 @@ export default function DevicesPage() {
                       <div>
                         <span style={{ fontSize: '10px', color: 'var(--color-muted)', display: 'block' }}>Fecha de Instalación</span>
                         <span style={{ fontSize: '12.5px', fontWeight: 600, color: selectedDevice.staticParams?.installationDate ? 'var(--color-text)' : 'var(--color-hint)' }}>
-                          {selectedDevice.staticParams?.installationDate ? format(new Date(selectedDevice.staticParams.installationDate + 'T00:00:00'), 'dd/MM/yyyy') : 'No registrada'}
+                          {formatInstallationDate(selectedDevice.staticParams?.installationDate)}
                         </span>
                       </div>
                     </div>
@@ -682,9 +763,9 @@ export default function DevicesPage() {
                       {selectedDevice.deviceType === 'water_meter' ? (
                         <LineChart
                           data={[...deviceTelemetryHistory].reverse().map(h => ({
-                            time: format(new Date(h.receivedAt), 'HH:mm'),
-                            caudal: (() => { const v = (h.decodedPayload as any).flow; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(2)); })(),
-                            nivel: (() => { const v = (h.decodedPayload as any).level; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(0)); })()
+                            time: safeFormatDate(h.receivedAt, 'HH:mm'),
+                            caudal: (() => { const p = (h.decodedPayload as any) || {}; const v = p.flow; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(2)); })(),
+                            nivel: (() => { const p = (h.decodedPayload as any) || {}; const v = p.level; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(0)); })()
                           }))}
                           margin={{ top: 5, right: 5, left: -25, bottom: 0 }}
                         >
@@ -698,8 +779,8 @@ export default function DevicesPage() {
                       ) : (
                         <LineChart
                           data={[...deviceTelemetryHistory].reverse().map(h => ({
-                            time: format(new Date(h.receivedAt), 'HH:mm'),
-                            llenado: (() => { const v = (h.decodedPayload as any).fillLevel; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(0)); })()
+                            time: safeFormatDate(h.receivedAt, 'HH:mm'),
+                            llenado: (() => { const p = (h.decodedPayload as any) || {}; const v = p.fillLevel; const n = Number(v); return isNaN(n) ? 0 : Number(n.toFixed(0)); })()
                           }))}
                           margin={{ top: 5, right: 5, left: -25, bottom: 0 }}
                         >
@@ -737,7 +818,7 @@ export default function DevicesPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11.5px', fontWeight: 600 }}>
                               <Radio size={11} style={{ color: 'var(--teal)' }} />
-                              <span>{format(new Date(log.receivedAt), 'dd/MM/yyyy HH:mm:ss')}</span>
+                              <span>{safeFormatDate(log.receivedAt, 'dd/MM/yyyy HH:mm:ss')}</span>
                             </div>
                             <span style={{ fontSize: '10px', color: 'var(--color-hint)', background: 'var(--color-bg)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
                               Port: {log.fPort} · FCnt: {log.fCnt}

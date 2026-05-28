@@ -25,12 +25,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const DEFAULT_CLIENTS: Organization[] = [
-  { id: 'plasticos_rival', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() }
+  { id: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() }
 ];
 
 const DEFAULT_USERS: User[] = [
   { id: '1', name: 'Super Admin', email: 'super@lorawan.com', password: '123456', role: 'superadmin', createdAt: new Date().toISOString() },
-  { id: '5', name: 'Admin Rival', email: 'admin@rival.com', password: '123456', role: 'admin', organizationId: 'plasticos_rival', createdAt: new Date().toISOString() }
+  { id: '5', name: 'Admin Rival', email: 'admin@rival.com', password: '123456', role: 'admin', organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618', createdAt: new Date().toISOString() }
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -51,11 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sembrar datos e inicializar
   useEffect(() => {
     // Migración nuclear única para purgar toda la base local (dashboards, grupos, alarmas, sesiones, etc.)
-    if (!localStorage.getItem('db_wipe_v12')) {
+    if (!localStorage.getItem('db_wipe_v13')) {
       localStorage.clear();
       localStorage.setItem('custom_clients', JSON.stringify(DEFAULT_CLIENTS));
       localStorage.setItem('custom_users', JSON.stringify(DEFAULT_USERS));
-      localStorage.setItem('db_wipe_v12', 'true');
+      localStorage.setItem('db_wipe_v13', 'true');
       window.location.reload();
       return;
     }
@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(storedClients);
         // Asegurar que Plásticos Rival está presente
-        if (!parsed.some((c: any) => c.id === 'plasticos_rival')) {
-          parsed.push({ id: 'plasticos_rival', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() });
+        if (!parsed.some((c: any) => c.id === 'e98a1a3b-2856-4277-bbcc-04f81a7b4618')) {
+          parsed.push({ id: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618', name: 'Plásticos Rival', description: 'Cliente industrial de medidores de agua', createdAt: new Date().toISOString() });
         }
         parsedClients = parsed;
       } catch (e) {
@@ -107,8 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { password: _, ...userWithoutPass } = matched;
           setUser(userWithoutPass);
         } else {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
+          // Si no es un usuario simulado pero hay un token real del backend activo, lo preservamos
+          const token = localStorage.getItem('token');
+          if (token && !token.startsWith('mock-token-')) {
+            setUser(parsedSession);
+          } else {
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+          }
         }
       } catch (e) {
         console.error("Error parsing stored user:", e);
@@ -117,7 +123,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Buscar en la base de usuarios dinámicos actualizados
+    const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    try {
+      const response = await fetch(`${serverUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.user) {
+          console.log('✅ Autenticación exitosa con backend NestJS:', data.user);
+          const realUser = {
+            ...data.user,
+            token: 'real-session-active'
+          };
+          setUser(realUser);
+          localStorage.setItem('user', JSON.stringify(realUser));
+          localStorage.setItem('token', data.access_token);
+          return true;
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        console.warn('⚠️ Falló autenticación en backend (ej. credenciales inválidas):', errData);
+      }
+    } catch (e) {
+      console.warn('🔌 Backend offline o inalcanzable, usando inicio de sesión simulado:', e);
+    }
+
+    // Buscar en la base de usuarios dinámicos actualizados (fallback local)
     const currentUsers = JSON.parse(localStorage.getItem('custom_users') || '[]');
     const found = currentUsers.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
     
@@ -135,6 +170,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+
+    const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    fetch(`${serverUrl}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include'
+    }).catch((e) => {
+      console.warn('Backend logout failed or offline:', e);
+    });
   };
 
   const hasRole = (roles: Role[]) => !!user && roles.includes(user.role);

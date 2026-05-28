@@ -4,6 +4,7 @@ import type { Device, TelemetryRecord } from '../types';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
   timeout: 10000,
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {

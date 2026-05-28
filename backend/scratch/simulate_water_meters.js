@@ -96,7 +96,8 @@ async function run() {
       body: JSON.stringify({
         name: 'Integración Medidores de Agua Simulación',
         description: 'Integración creada automáticamente para simular 10 medidores',
-        preset: 'water-meter'
+        preset: 'water-meter',
+        organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618'
       })
     });
 
@@ -171,103 +172,127 @@ function decode(bytes, port) {
     process.exit(1);
   }
 
-  // D. Simulación de 10 Medidores de Agua enviando uplinks y parches
-  console.log('📶 Generando y enviando telemetría para 10 Medidores de Agua...');
-  const devEUIs = [];
+  // D. Registro y configuración inicial de los 10 dispositivos
+  console.log('📶 Configurando estructura para 10 Medidores de Agua...');
+  const devicesState = [];
   for (let i = 1; i <= 10; i++) {
     const numStr = String(i).padStart(2, '0');
     const devEUI = `WM000000000000${numStr}`;
     const deviceName = `Medidor Agua Sector A${numStr}`;
-    devEUIs.push({ devEUI, name: deviceName });
-
-    // Definir valores realistas e interesantes (algunos con alertas para probar las reglas)
-    // Medidor 3 tiene una fuga
-    // Medidor 7 tiene un desborde
-    // Medidor 9 tiene congelamiento y manipulación
-    const flow = i === 3 ? 152.45 : (12.45 + i * 2.3); // Caudal (L/h)
-    const level = i === 7 ? 420.5 : (150.0 - i * 5.2); // Nivel (cm)
-    const temp = i === 9 ? -2.5 : (16.2 + (i % 3) * 1.5); // Temp (°C)
-    const totalConsumption = 1200.45 + i * 45.2; // Consumo acumulado (m³)
-    const battery = 98 - i; // Batería (%)
     
-    let alerts = 0;
-    if (i === 3) alerts |= 0x01; // Leak
-    if (i === 7) alerts |= 0x02; // Overflow
-    if (i === 9) {
-      alerts |= 0x04; // Frost
-      alerts |= 0x08; // Tamper
-    }
-
-    const payloadBase64 = encodePayload(flow, level, temp, totalConsumption, alerts, battery);
-
-    // 1. Enviar el uplink vía webhook de integración (esto crea el dispositivo en la DB)
-    console.log(`\n🔹 [${i}/10] Enviando Uplink para ${deviceName} (DevEUI: ${devEUI})...`);
-    console.log(`   Métricas: Caudal=${flow.toFixed(2)}L/h, Nivel=${level.toFixed(1)}cm, Temp=${temp.toFixed(1)}°C, Consumo=${totalConsumption.toFixed(2)}m³, Batería=${battery}%, AlertasBit=${alerts}`);
-    try {
-      const payload = {
-        devEUI,
-        fPort: 1,
-        fCnt: 100 + i,
-        data: payloadBase64,
-        rxInfo: [{ gatewayId: 'GATEWAY-SIM-QUITO', rssi: -65 - i, snr: 9.5 - (i * 0.1) }],
-        txInfo: { dataRate: { spreadFactor: 7 } }
-      };
-
-      const res = await fetch(`${BASE_URL}/webhook/uplink/${integrationId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${integrationSecret}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (res.status === 200 && data.status === 'ok') {
-        console.log(`   ✅ Uplink recibido y procesado por el backend.`);
-      } else {
-        throw new Error(`Error en el uplink: Código ${res.status}, data: ${JSON.stringify(data)}`);
-      }
-    } catch (err) {
-      console.error(`   ❌ Falló el envío del uplink:`, err.message);
-      process.exit(1);
-    }
-
-    // 2. Actualizar los metadatos del dispositivo mediante PATCH (nombre, tipo de dispositivo, active)
-    console.log(`   ⚙️ Actualizando metadatos del dispositivo (nombre y tipo)...`);
-    try {
-      const res = await fetch(`${BASE_URL}/devices/${devEUI}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: deviceName,
-          deviceType: 'water_meter',
-          active: true
-        })
-      });
-
-      const data = await res.json();
-      if (res.status === 200 && data.deviceType === 'water_meter') {
-        console.log(`   ✅ Dispositivo configurado como "water_meter" con nombre "${deviceName}".`);
-      } else {
-        throw new Error(`Error en el parche de dispositivo: Código ${res.status}, data: ${JSON.stringify(data)}`);
-      }
-    } catch (err) {
-      console.error(`   ❌ Falló la actualización del dispositivo:`, err.message);
-      process.exit(1);
-    }
+    devicesState.push({
+      devEUI,
+      name: deviceName,
+      flow: i === 3 ? 5.2 : (0.5 + i * 0.4), // Caudal base realista en L/h (caudal > 4.5 activa alertas/cierre en medidor 3!)
+      level: i === 7 ? 420.5 : (150.0 - i * 5.2), // Nivel base
+      temp: i === 9 ? -2.5 : (16.2 + (i % 3) * 1.5), // Temp
+      totalConsumption: 1200.45 + i * 45.2, // Consumo inicial
+      battery: 98 - i,
+      fCnt: 100 + i,
+      alerts: i === 3 ? 0x01 : (i === 7 ? 0x02 : (i === 9 ? 0x0C : 0x00)) // 3=Leak, 7=Overflow, 9=Frost+Tamper
+    });
   }
 
-  console.log('\n======================================================');
-  console.log('🎉 SIMULACIÓN CREADA CON EXITO DE EXTREMO A EXTREMO! 🎉');
-  console.log('======================================================');
-  console.log(`- Total de medidores registrados: 10`);
-  console.log(`- ID de Integración LNS: ${integrationId}`);
-  console.log(`- Dispositivos listados:`);
-  devEUIs.forEach((d, idx) => {
-    console.log(`  ${idx + 1}. [${d.devEUI}] ${d.name}`);
+  console.log('✅ Estructura de simulación lista.');
+
+  // E. Bucle de Inyección de Telemetría Continuo
+  let iteration = 0;
+  
+  async function sendTelemetryBatch() {
+    iteration++;
+    console.log(`\n------------------------------------------------------------`);
+    console.log(`📡 [Lote #${iteration}] Enviando telemetría en tiempo real...`);
+    console.log(`------------------------------------------------------------`);
+
+    for (const d of devicesState) {
+      // Variar levemente los valores para simular comportamiento dinámico y animaciones en vivo
+      const flowVariation = (Math.random() - 0.5) * 0.2;
+      const levelVariation = (Math.random() - 0.5) * 1.0;
+      const tempVariation = (Math.random() - 0.5) * 0.1;
+
+      // Medidor 3 tiene caudal alto para disparar la regla de cierre de válvula si es necesario, 
+      // pero agregamos una pequeña oscilación alrededor de 5.2 L/h
+      if (d.devEUI === 'WM00000000000003') {
+        d.flow = Math.max(4.6, d.flow + flowVariation);
+      } else {
+        d.flow = Math.max(0.1, d.flow + flowVariation);
+      }
+      d.level = Math.max(10, d.level + levelVariation);
+      d.temp = d.temp + tempVariation;
+      
+      // El consumo total siempre aumenta con el caudal consumido
+      // (caudal en L/h dividido por 3600 seg, multiplicado por el intervalo de 8 segundos, convertido a m³ que es L/1000)
+      const secondsPassed = 8;
+      const litersConsumed = (d.flow * secondsPassed) / 3600;
+      d.totalConsumption += litersConsumed / 1000;
+      
+      d.fCnt++;
+
+      const payloadBase64 = encodePayload(d.flow, d.level, d.temp, d.totalConsumption, d.alerts, d.battery);
+
+      console.log(`🔹 [${d.name}] Caudal: ${d.flow.toFixed(2)} L/h | Nivel: ${d.level.toFixed(1)} cm | Temp: ${d.temp.toFixed(1)}°C | Consumo: ${d.totalConsumption.toFixed(5)} m³ | AlertasBit: ${d.alerts}`);
+
+      try {
+        const payload = {
+          devEUI: d.devEUI,
+          fPort: 1,
+          fCnt: d.fCnt,
+          data: payloadBase64,
+          rxInfo: [{ gatewayId: 'GATEWAY-SIM-QUITO', rssi: -65 - (d.fCnt % 10), snr: 9.5 - ((d.fCnt % 5) * 0.1) }],
+          txInfo: { dataRate: { spreadFactor: 7 } }
+        };
+
+        const res = await fetch(`${BASE_URL}/webhook/uplink/${integrationId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${integrationSecret}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.status === 200 && data.status === 'ok') {
+          // En la primera iteración, configurar los metadatos del dispositivo ahora que el webhook ya lo ha auto-provisto
+          if (iteration === 1) {
+            try {
+              await fetch(`${BASE_URL}/devices/${d.devEUI}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: d.name,
+                  deviceType: 'water_meter',
+                  active: true,
+                  organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618'
+                })
+              });
+            } catch (e) {
+              console.warn(`      ⚠️ Error al parchar metadatos para ${d.devEUI}:`, e.message);
+            }
+          }
+        } else {
+          console.warn(`   ⚠️ Respuesta inesperada del webhook para ${d.devEUI}:`, data);
+        }
+      } catch (err) {
+        console.error(`   ❌ Error al enviar telemetría para ${d.devEUI}:`, err.message);
+      }
+    }
+
+    console.log(`\n👉 Lote #${iteration} completado. Siguiente envío en 8 segundos...`);
+  }
+
+  // Ejecutar el primer envío de inmediato
+  await sendTelemetryBatch();
+
+  // Configurar el intervalo para ejecución infinita cada 8 segundos
+  const intervalId = setInterval(sendTelemetryBatch, 8000);
+
+  // Manejar terminación limpia
+  process.on('SIGINT', () => {
+    clearInterval(intervalId);
+    console.log('\n🛑 Simulación detenida por el usuario. ¡Hasta pronto!');
+    process.exit(0);
   });
-  console.log('\n👉 El frontend recibirá estos datos mediante peticiones en vivo y mostrará las gráficas y alertas correspondientes.');
 }
 
 run();

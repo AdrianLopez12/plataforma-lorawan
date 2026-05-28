@@ -16,8 +16,20 @@ const severityConfig = {
 };
 
 export default function AlertItem({ alert, onAcknowledge, onDelete }: AlertItemProps) {
-  const cfg = severityConfig[alert.severity];
+  const severity = alert.severity || 'info';
+  const cfg = severityConfig[severity as keyof typeof severityConfig] || severityConfig.info;
   const Icon = cfg.icon;
+
+  const dateStr = alert.createdAt || (alert as any).timestamp || new Date().toISOString();
+  let timeAgo = 'hace un momento';
+  try {
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime())) {
+      timeAgo = formatDistanceToNow(parsedDate, { addSuffix: true, locale: es });
+    }
+  } catch (e) {
+    console.warn('Error parsing alert date:', e);
+  }
 
   return (
     <div className="alert-item" style={{ background: cfg.bg, borderLeft: `3px solid ${cfg.border}`, opacity: alert.acknowledged ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12 }}>
@@ -27,7 +39,7 @@ export default function AlertItem({ alert, onAcknowledge, onDelete }: AlertItemP
           <div className="alert-device" style={{ color: cfg.text, fontWeight: 'bold' }}>{alert.deviceName ?? alert.devEUI}</div>
           <div className="alert-message" style={{ margin: '2px 0', fontSize: 13 }}>{alert.message}</div>
           <div className="alert-time" style={{ fontSize: 11, color: '#666' }}>
-            {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true, locale: es })}
+            {timeAgo}
           </div>
         </div>
       </div>

@@ -62,17 +62,30 @@ export class RuleEngineExecutorService {
         case 'saveTelemetry':
         case 'saveTimeseries':
           if (outputPayload) {
-            await this.telemetryService.saveUplink({
+            const defaultPort = device.deviceType === 'smartbin' ? 2 : 1;
+            const rawPayloadObj = {
               devEUI: device.devEUI,
-              fPort: payload.fPort || 2,
+              fPort: payload.fPort || defaultPort,
               fCnt: payload.fCnt || 1,
-              rssi: payload.rssi || -80,
-              snr: payload.snr || 8,
-              spreadingFactor: payload.spreadingFactor || 7,
-              rawPayload: payload.rawPayload || '',
-              decodedPayload: outputPayload,
-              receivedAt: new Date().toISOString(),
-            });
+              data: payload.rawPayload || payload.data || '',
+              rxInfo: [{
+                gatewayId: payload.gatewayId || 'GATEWAY-SIM-QUITO',
+                rssi: payload.rssi !== undefined ? payload.rssi : -80,
+                loRaSNR: payload.snr !== undefined ? payload.snr : 8,
+              }],
+              txInfo: {
+                dataRate: {
+                  spreadFactor: payload.spreadingFactor || 7
+                }
+              }
+            };
+
+            await this.telemetryService.saveUplinkWithDecoded(
+              rawPayloadObj,
+              device,
+              outputPayload,
+              device.integrationId || undefined
+            );
           }
           routingLabel = 'Success';
           break;
@@ -191,6 +204,7 @@ export class RuleEngineExecutorService {
             message: msg,
             acknowledged: false,
             timestamp: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
           });
 
           routingLabel = 'Success';

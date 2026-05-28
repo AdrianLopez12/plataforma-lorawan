@@ -63,6 +63,62 @@ const DEFAULT_RULES: AlertRule[] = [
     active: true,
     organizationId: 'org1',
     createdAt: new Date().toISOString()
+  },
+  {
+    id: 'rule-flow-critical-rival',
+    name: 'Caudal Alto Crítico',
+    applyToAll: true,
+    deviceType: 'water_meter',
+    metricKey: 'flow',
+    operator: '>',
+    thresholdValue: 80,
+    severity: 'critical',
+    messageTemplate: '¡Fuga Crítica! Caudal de {deviceName} alcanzó {value} L/h (Límite: 80 L/h)',
+    active: true,
+    organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'rule-level-warning-rival',
+    name: 'Nivel de Agua Crítico',
+    applyToAll: true,
+    deviceType: 'water_meter',
+    metricKey: 'level',
+    operator: '<=',
+    thresholdValue: 15,
+    severity: 'warning',
+    messageTemplate: 'Advertencia: Nivel de agua bajo en {deviceName} es {value} cm (Límite: 15 cm)',
+    active: true,
+    organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'rule-bin-full-rival',
+    name: 'Contenedor Lleno',
+    applyToAll: true,
+    deviceType: 'smartbin',
+    metricKey: 'fillLevel',
+    operator: '>=',
+    thresholdValue: 85,
+    severity: 'critical',
+    messageTemplate: 'Crítico: El contenedor {deviceName} está lleno ({value}%)',
+    active: true,
+    organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'rule-battery-low-rival',
+    name: 'Batería Crítica General',
+    applyToAll: true,
+    deviceType: 'water_meter',
+    metricKey: 'battery',
+    operator: '<',
+    thresholdValue: 20,
+    severity: 'warning',
+    messageTemplate: 'Batería baja en medidor {deviceName}: {value}% restante',
+    active: true,
+    organizationId: 'e98a1a3b-2856-4277-bbcc-04f81a7b4618',
+    createdAt: new Date().toISOString()
   }
 ];
 

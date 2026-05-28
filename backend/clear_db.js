@@ -14,12 +14,10 @@ async function clear() {
     await client.connect();
     console.log('Conexión exitosa.');
 
-    console.log('Limpiando registros antiguos de telemetría, dispositivos e integraciones...');
-    await client.query('DELETE FROM telemetry');
-    await client.query('DELETE FROM devices');
-    await client.query('DELETE FROM integrations');
+    console.log('Limpiando todos los registros de la base de datos (telemetría, dispositivos, integraciones, logs de auditoría/alertas)...');
+    await client.query('TRUNCATE TABLE telemetry, devices, integrations, audit_logs CASCADE;');
 
-    console.log('¡Limpieza de base de datos completada con éxito!');
+    console.log('¡Limpieza completa de la base de datos realizada con éxito!');
   } catch (err) {
     console.error('Error durante la limpieza de base de datos:', err);
   } finally {

@@ -113,6 +113,12 @@ body {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  --sidebar-w: 250px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-layout.sidebar-collapsed {
+  --sidebar-w: 0px;
 }
 
 .main-content {
@@ -135,7 +141,100 @@ body {
   flex-shrink: 0;
   box-shadow: 4px 0 24px rgba(15, 23, 42, 0.02);
   z-index: 100;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.app-layout.sidebar-collapsed .sidebar {
+  width: 0px;
+  overflow: hidden;
+  border-right: none;
+  padding: 0;
+}
+
+/* Premium Desktop Sidebar Toggle Handle */
+.sidebar-toggle-handle {
+  position: fixed;
+  top: 24px;
+  left: calc(var(--sidebar-w) - 14px);
+  width: 28px;
+  height: 28px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  z-index: 101;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-toggle-handle:hover {
+  color: var(--teal-dark);
+  border-color: var(--teal);
+  box-shadow: 0 4px 12px rgba(29, 158, 117, 0.2);
+  transform: scale(1.1);
+}
+
+.app-layout.sidebar-collapsed .sidebar-toggle-handle {
+  left: 16px;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle-handle {
+    display: none;
+  }
+}
+
+/* Fullscreen NOC Monitoring Dashboard Styles */
+.fullscreen-exit-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fullscreen-exit-btn:hover {
+  background: rgba(15, 23, 42, 0.85);
+  transform: scale(1.1);
+  box-shadow: 0 8px 32px rgba(29, 158, 117, 0.3);
+  color: var(--teal);
+}
+
+/* Pseudo-clases nativas :fullscreen para esconder sidebar y header */
+:fullscreen .sidebar {
+  display: none !important;
+}
+
+:fullscreen .sidebar-toggle-handle {
+  display: none !important;
+}
+
+:fullscreen .mobile-header {
+  display: none !important;
+}
+
+:fullscreen .page {
+  padding: 24px !important;
+}
+
+
 
 .sidebar-header {
   padding: 24px 20px 20px;

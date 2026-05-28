@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
-import { Menu, Zap } from 'lucide-react';
+import { Menu, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function AppLayout() {
   const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    localStorage.getItem('sidebar-collapsed') === 'true'
+  );
   const location = useLocation();
 
   // Close sidebar drawer automatically on route navigation on mobile
@@ -16,8 +19,14 @@ export default function AppLayout() {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  const toggleSidebar = () => {
+    const nextState = !isSidebarCollapsed;
+    setIsSidebarCollapsed(nextState);
+    localStorage.setItem('sidebar-collapsed', String(nextState));
+  };
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {/* Dynamic blurred dark glass backdrop overlay for mobile view */}
       <div 
         className={`sidebar-overlay ${isSidebarOpen ? 'active' : ''}`}
@@ -47,6 +56,15 @@ export default function AppLayout() {
         </span>
         <div style={{ width: 40 }} /> {/* Horizontal balancer spacing */}
       </header>
+
+      {/* Premium Desktop Sidebar Collapse Toggle Handle */}
+      <button 
+        onClick={toggleSidebar}
+        className="sidebar-toggle-handle"
+        title={isSidebarCollapsed ? "Mostrar menú de navegación" : "Contraer menú de navegación"}
+      >
+        {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
 
       {/* Sidebar passing mobile state toggles */}
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />

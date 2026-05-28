@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { TelemetryRecord } from '../telemetry/telemetry.entity';
 
@@ -35,6 +36,7 @@ export class Device {
   active: boolean;
 
   @Column({ nullable: true })
+  @Index()
   organizationId: string;
 
   @Column({ default: true })

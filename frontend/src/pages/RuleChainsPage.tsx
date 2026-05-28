@@ -3,15 +3,48 @@ import { useNavigate } from 'react-router-dom';
 import { getRuleChains, createRuleChain, updateRuleChain, deleteRuleChain } from '../services/api';
 import type { RuleChain } from '../types';
 import { GitFork, Plus, Calendar, ToggleLeft, ToggleRight, Trash2, PlayCircle, RefreshCw } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function RuleChainsPage() {
   const navigate = useNavigate();
+  const { user, clients } = useAuth();
   const [chains, setChains] = useState<RuleChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [selectedFilterOrgId, setSelectedFilterOrgId] = useState('all');
+
+  // Resolver recursivamente todas las organizaciones descendientes (subclientes de subclientes)
+  const getDescendantOrgIds = (orgId: string): string[] => {
+    const ids: string[] = [orgId];
+    const getChildren = (id: string) => {
+      const children = clients.filter(c => c.parentId === id);
+      children.forEach(child => {
+        ids.push(child.id);
+        getChildren(child.id);
+      });
+    };
+    getChildren(orgId);
+    return ids;
+  };
+
+  const visibleOrgIds = user?.role === 'superadmin'
+    ? []
+    : (user?.organizationId ? getDescendantOrgIds(user.organizationId) : []);
+
+  const visibleClients = clients.filter(c => {
+    if (user?.role === 'superadmin') return true;
+    return visibleOrgIds.includes(c.id);
+  });
+
+  useEffect(() => {
+    if (user) {
+      setSelectedOrgId(user.organizationId || (visibleClients.length > 0 ? visibleClients[0].id : ''));
+    }
+  }, [user, clients]);
 
   const loadChains = () => {
     setLoading(true);
@@ -22,7 +55,7 @@ export default function RuleChainsPage() {
       .catch((err) => {
         console.warn('API error, using fallback rule chains:', err);
         // Fallback premium para simulación e interacción inmediata offline
-        const localFallback: RuleChain[] = [
+        const defaultFallback: RuleChain[] = [
           {
             id: 'rc_default',
             name: 'Procesamiento de Agua Principal',
@@ -42,14 +75,34 @@ export default function RuleChainsPage() {
             graph: {}
           }
         ];
-        setChains(localFallback);
+
+        // Cargar flujos simulados guardados por el usuario
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        let simulated: RuleChain[] = [];
+        if (storedSimulated) {
+          try {
+            simulated = JSON.parse(storedSimulated);
+          } catch (e) {
+            console.error('Error parsing simulated_rule_chains:', e);
+          }
+        }
+
+        // Combinar los predeterminados con los del usuario
+        const combined = [...simulated];
+        defaultFallback.forEach((def) => {
+          if (!combined.some(c => c.id === def.id)) {
+            combined.push(def);
+          }
+        });
+
+        setChains(combined);
       })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     loadChains();
-  }, []);
+  }, [user]);
 
   const handleToggleActive = (chain: RuleChain) => {
     const nextState = !chain.active;
@@ -59,10 +112,62 @@ export default function RuleChainsPage() {
       })
       .catch(() => {
         // Fallback de simulación interactiva local
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        let simulated: RuleChain[] = [];
+        if (storedSimulated) {
+          try {
+            simulated = JSON.parse(storedSimulated);
+          } catch (e) {}
+        }
+
+        const existingIdx = simulated.findIndex(c => c.id === chain.id);
+        if (existingIdx !== -1) {
+          simulated[existingIdx].active = nextState;
+        } else {
+          // Si era una default, la copiamos a simulated para persistir su cambio
+          const defaultChains = [
+            {
+              id: 'rc_default',
+              name: 'Procesamiento de Agua Principal',
+              description: 'Filtra caudales altos, registra en base de datos e inunda válvulas si hay fugas.',
+              active: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              graph: {}
+            },
+            {
+              id: 'rc_bins',
+              name: 'Flota SmartBins Rival',
+              description: 'Enruta telemetría volumétrica y enciende alarmas al superar el 85% de capacidad.',
+              active: false,
+              createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+              updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+              graph: {}
+            }
+          ];
+          const matchedDefault = defaultChains.find(c => c.id === chain.id);
+          if (matchedDefault) {
+            matchedDefault.active = nextState;
+            simulated.push(matchedDefault);
+          } else {
+            simulated.push({ ...chain, active: nextState });
+          }
+        }
+
+        // Si se activó esta cadena, desactivamos todas las demás
+        if (nextState) {
+          simulated = simulated.map(c => {
+            if (c.id !== chain.id) return { ...c, active: false };
+            return c;
+          });
+        }
+
+        localStorage.setItem('simulated_rule_chains', JSON.stringify(simulated));
+
         setChains(prev =>
           prev.map(c => {
             if (c.id === chain.id) return { ...c, active: nextState };
-            if (nextState) return { ...c, active: false }; // Solo puede haber una activa
+            if (nextState) return { ...c, active: false };
             return c;
           })
         );
@@ -76,6 +181,15 @@ export default function RuleChainsPage() {
         loadChains();
       })
       .catch(() => {
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        if (storedSimulated) {
+          try {
+            let simulated: RuleChain[] = JSON.parse(storedSimulated);
+            simulated = simulated.filter(c => c.id !== id);
+            localStorage.setItem('simulated_rule_chains', JSON.stringify(simulated));
+          } catch (e) {}
+        }
+        localStorage.removeItem(`rule_chain_local_${id}`);
         setChains(prev => prev.filter(c => c.id !== id));
       });
   };
@@ -116,7 +230,8 @@ export default function RuleChainsPage() {
       name: newName,
       description: newDesc,
       graph: initialGraph,
-      active: chains.length === 0 // Activa por defecto si es la primera
+      organizationId: selectedOrgId || undefined,
+      active: chains.length === 0
     })
       .then((created) => {
         setShowCreateModal(false);
@@ -132,10 +247,28 @@ export default function RuleChainsPage() {
           name: newName,
           description: newDesc,
           active: chains.length === 0,
+          organizationId: selectedOrgId || undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           graph: initialGraph
         };
+
+        const storedSimulated = localStorage.getItem('simulated_rule_chains');
+        let simulated: RuleChain[] = [];
+        if (storedSimulated) {
+          try {
+            simulated = JSON.parse(storedSimulated);
+          } catch (e) {}
+        }
+
+        if (mockCreated.active) {
+          simulated = simulated.map(c => ({ ...c, active: false }));
+        }
+
+        simulated.unshift(mockCreated);
+        localStorage.setItem('simulated_rule_chains', JSON.stringify(simulated));
+        localStorage.setItem(`rule_chain_local_${mockCreated.id}`, JSON.stringify(initialGraph));
+
         setShowCreateModal(false);
         setNewName('');
         setNewDesc('');
@@ -144,6 +277,20 @@ export default function RuleChainsPage() {
       })
       .finally(() => setCreating(false));
   };
+
+  const filteredChains = chains.filter(chain => {
+    if (user?.role !== 'superadmin') {
+      // Un cliente puede ver sus propias reglas y las de todos sus sub-clientes jerárquicos
+      if (selectedFilterOrgId !== 'all') {
+        return chain.organizationId === selectedFilterOrgId;
+      }
+      return visibleOrgIds.includes(chain.organizationId || '');
+    }
+    if (selectedFilterOrgId !== 'all') {
+      return chain.organizationId === selectedFilterOrgId;
+    }
+    return true;
+  });
 
   return (
     <div className="page">
@@ -164,12 +311,33 @@ export default function RuleChainsPage() {
         </button>
       </div>
 
+      {(user?.role === 'superadmin' || visibleClients.length > 1) && (
+        <div className="toolbar" style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-hint)' }}>Filtrar por Cliente (Tenant):</span>
+            <select
+              className="form-input"
+              value={selectedFilterOrgId}
+              onChange={(e) => setSelectedFilterOrgId(e.target.value)}
+              style={{ width: 'auto', minWidth: 220, padding: '6px 12px', fontSize: 13, height: '36px' }}
+            >
+              <option value="all">{user?.role === 'superadmin' ? 'Ver Todos los Clientes' : 'Ver Todos (Propios y Subclientes)'}</option>
+              {visibleClients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.id === user?.organizationId ? '(Tus Propios Flujos)' : '(Subcliente)'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="card" style={{ padding: 60, textAlign: 'center', color: 'var(--color-hint)' }}>
           <RefreshCw size={24} className="animate-spin text-teal-500" style={{ margin: '0 auto 12px' }} />
           Cargando flujos de datos...
         </div>
-      ) : chains.length === 0 ? (
+      ) : filteredChains.length === 0 ? (
         <div className="card empty-state">
           <GitFork size={40} style={{ color: 'var(--color-hint)', marginBottom: 12 }} />
           <h3>No hay Cadenas de Reglas</h3>
@@ -186,7 +354,7 @@ export default function RuleChainsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {chains.map((chain) => (
+          {filteredChains.map((chain) => (
             <div
               key={chain.id}
               className="card"
@@ -209,10 +377,15 @@ export default function RuleChainsPage() {
                 <p style={{ fontSize: 13.5, color: 'var(--color-muted)', marginTop: 4, margin: '4px 0 8px 0' }}>
                   {chain.description || 'Sin descripción provista.'}
                 </p>
-                <div style={{ display: 'flex', gap: 16, fontSize: 11.5, color: 'var(--color-hint)', fontFamily: 'monospace' }}>
+                <div style={{ display: 'flex', gap: 16, fontSize: 11.5, color: 'var(--color-hint)', fontFamily: 'monospace', flexWrap: 'wrap', marginTop: 4 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Calendar size={12} /> Creado: {new Date(chain.createdAt).toLocaleDateString()}
                   </span>
+                  {user?.role === 'superadmin' && (
+                    <span>
+                      · Tenant: <strong style={{ color: 'var(--color-text)' }}>{clients.find(c => c.id === chain.organizationId)?.name || chain.organizationId || 'Global/Ninguno'}</strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -278,6 +451,24 @@ export default function RuleChainsPage() {
                   style={{ minHeight: 80, resize: 'vertical' }}
                 />
               </div>
+              {(user?.role === 'superadmin' || visibleClients.length > 1) && (
+                <div className="form-group">
+                  <label className="form-label">Cliente / Tenant Asociado</label>
+                  <select
+                    className="form-input"
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    style={{ height: '38px', fontSize: '13.5px' }}
+                  >
+                    {user?.role === 'superadmin' && <option value="">-- Sin Cliente (Global/Ninguno) --</option>}
+                    {visibleClients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.id === user?.organizationId ? '(Tus Propios Flujos)' : '(Subcliente)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 10 }}>
                 <button
                   type="button"

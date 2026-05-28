@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('audit_logs')
@@ -26,8 +27,10 @@ export class AuditLog {
   ipAddress: string;
 
   @Column({ nullable: true })
+  @Index()
   organizationId: string; // To allow filtering logs by tenant in multi-tenant environments
 
   @CreateDateColumn()
+  @Index()
   createdAt: Date;
 }
